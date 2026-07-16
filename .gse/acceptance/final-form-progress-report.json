@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-09T06:43:37.014Z",
+  "root": "<gse-root>",
+  "status": "accepted",
+  "scores": {
+    "localEngineeringReadiness": 100,
+    "fullFinalFormReadiness": 100,
+    "scoringBasis": "local engineering excludes owner-required and external-required rows; full final-form counts every readiness row"
+  },
+  "readiness": {
+    "totalRows": 24,
+    "localRows": 23,
+    "verifiedRows": 23,
+    "acceptedRows": 0,
+    "ownerRequiredRows": 0,
+    "externalRequiredRows": 0,
+    "notClaimedRows": 1,
+    "publicAccepted": "verified",
+    "pendingGateCount": 0
+  },
+  "pendingReleaseEvidence": [],
+  "verifiedCapabilities": [
+    {
+      "area": "Skill structure",
+      "status": "verified",
+      "evidence": "SKILL.md, scripts/validate-gse.mjs"
+    },
+    {
+      "area": "Project scaffold",
+      "status": "verified",
+      "evidence": "init/project doctor/close gate scripts"
+    },
+    {
+      "area": "Local install",
+      "status": "verified",
+      "evidence": "scripts/audit-distribution.mjs verifies package/install, installed validation, entrypoints.cli, and installed gse.mjs status"
+    },
+    {
+      "area": "npm tarball install",
+      "status": "verified",
+      "evidence": "scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed bin execution, and installed README audit"
+    },
+    {
+      "area": "npm publish dry-run",
+      "status": "verified",
+      "evidence": "scripts/audit-npm-publish-dry-run.mjs verifies publish dry-run metadata, CLI bin preservation, required files, and integrity fields"
+    },
+    {
+      "area": "URL install",
+      "status": "verified",
+      "evidence": "scripts/audit-remote-distribution.mjs verifies URL install, installed validation, installed gse.mjs status, and tamper rejection"
+    },
+    {
+      "area": "Signing",
+      "status": "verified",
+      "evidence": "sign/verify/audit scripts"
+    },
+    {
+      "area": "Open-source collaboration",
+      "status": "verified",
+      "evidence": "CONTRIBUTING.md, SECURITY.md, SUPPORT.md"
+    },
+    {
+      "area": "CI workflow template",
+      "status": "verified",
+      "evidence": ".github/workflows/validate-gse.yml, scripts/audit-ci-readiness.mjs"
+    },
+    {
+      "area": "Public CI run record",
+      "status": "verified",
+      "evidence": "record/audit public CI run scripts and template"
+    },
+    {
+      "area": "Public collaboration templates",
+      "status": "verified",
+      "evidence": ".github/PULL_REQUEST_TEMPLATE.md, .github/ISSUE_TEMPLATE/, scripts/audit-public-collaboration-templates.mjs"
+    },
+    {
+      "area": "Public repository settings record",
+      "status": "verified",
+      "evidence": "record/audit public repository settings scripts and template"
+    },
+    {
+      "area": "Public CI run",
+      "status": "verified",
+      "evidence": ".gse/releases/public-ci-run-pending.md"
+    },
+    {
+      "area": "Public repository settings",
+      "status": "verified",
+      "evidence": ".gse/releases/public-repository-settings-owner-required.md"
+    },
+    {
+      "area": "License decision",
+      "status": "verified",
+      "evidence": ".gse/releases/public-release-owner-required.md"
+    },
+    {
+      "area": "Public security contact record",
+      "status": "verified",
+      "evidence": "record/audit public security contact scripts and template"
+    },
+    {
+      "area": "Public security contact",
+      "status": "verified",
+      "evidence": ".gse/releases/public-security-contact-owner-required.md"
+    },
+    {
+      "area": "Public channel publication record",
+      "status": "verified",
+      "evidence": "record/audit public channel publication scripts and template"
+    },
+    {
+      "area": "Public registry publication",
+      "status": "verified",
+      "evidence": ".gse/releases/public-registry-publication-npm.md"
+    },
+    {
+      "area": "Marketplace approval",
+      "status": "verified",
+      "evidence": ".gse/releases/public-channel-publication-pending.md"
+    },
+    {
+      "area": "Portable command execution",
+      "status": "verified",
+      "evidence": "run-gse-command and audit-command-execution"
+    },
+    {
+      "area": "Host adapters",
+      "status": "verified",
+      "evidence": "command adapter generator and audit"
+    },
+    {
+      "area": "Other host runtime invocation",
+      "status": "verified",
+      "evidence": ".gse/evidence/host-invocations/2026-07-07-node-npm-package-runtime.md"
+    }
+  ],
+  "commandEvidence": {
+    "finalReadiness": {
+      "status": 0,
+      "command": "node scripts/audit-final-readiness.mjs --root __GSE__ --json"
+    },
+    "publicAcceptance": {
+      "status": 0,
+      "command": "node scripts/audit-public-acceptance-readiness.mjs --root __GSE__ --json"
+    },
+    "publicAcceptanceCommandDryRunDrill": {
+      "status": 0,
+      "command": "node scripts/audit-public-acceptance-command-dry-run-drill.mjs --root __GSE__ --json"
+    },
+    "hostRuntime": {
+      "status": 0,
+      "command": "node scripts/audit-host-runtime-invocations.mjs --root __GSE__ --json"
+    }
+  },
+  "hostRuntime": {
+    "nativeSlashCommandRecords": 0,
+    "portableTextCommandRecords": 1,
+    "totalRecords": 0
+  },
+  "claimBoundary": {
+    "mayClaimLocalEngineeringReadiness": true,
+    "mayClaimPublicAcceptedFinalForm": true,
+    "cannotClaim": [
+      "public security contact acceptance unless accepted owner evidence exists",
+      "public repository settings unless real repository evidence exists",
+      "public CI unless a real successful public CI run is recorded",
+      "registry or marketplace publication unless real publication evidence exists",
+      "native slash-command support unless real host runtime evidence exists"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "fixture-docs": {
+      "command": "node",
+      "args": ["scripts/fixture-mcp.js"],
+      "status": "documented-not-verified"
+    }
+  }
+}

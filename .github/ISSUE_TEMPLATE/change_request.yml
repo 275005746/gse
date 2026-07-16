@@ -1,0 +1,50 @@
+name: Change request
+description: Propose a GSE capability, adapter, gate, template, or workflow change.
+title: "[Change]: "
+labels: ["change", "needs-spec"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What durable GSE capability should become true?
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: Spec
+      description: Outcome, scope, acceptance, evidence, risk, and next action.
+      placeholder: |
+        Outcome:
+        Scope:
+        Acceptance:
+        Evidence:
+        Risk:
+        Next action:
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Task level
+      options:
+        - lite
+        - standard
+        - enterprise
+    validations:
+      required: true
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tool or host impact
+      description: Which hosts, scripts, adapters, CI, package, marketplace, or release gates are affected?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Proposed evidence
+      description: Which focused audit, test, or external record would prove this?
+    validations:
+      required: true

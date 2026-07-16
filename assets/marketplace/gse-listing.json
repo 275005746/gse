@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "name": "gse",
+  "displayName": "GSE",
+  "tagline": "Goal-Spec-Evidence Engineering for long-running agentic software projects.",
+  "summary": "Goal-Spec-Evidence workflow skill for AI coding agents that turns ad hoc development into goal maps, scoped specs, focused execution, evidence gates, and reusable learning.",
+  "categories": [
+    "agent workflow engineering",
+    "software development workflow",
+    "goal-spec workflow",
+    "AI coding agents",
+    "project governance"
+  ],
+  "keywords": [
+    "GSE",
+    "Goal-Spec-Evidence",
+    "agent workflow engineering",
+    "goal-spec workflow",
+    "SDD",
+    "AI coding agent workflow",
+    "evidence gates",
+    "goal map",
+    "project scaffolding",
+    "change packs",
+    "role-based execution"
+  ],
+  "hostSupport": [
+    {
+      "host": "Codex-style agents",
+      "status": "documented",
+      "adapter": ".codex/gse-command.md",
+      "notes": "Portable runner and pointer adapter are verified; project-level native slash-command execution is host-specific."
+    },
+    {
+      "host": "Claude Code-style agents",
+      "status": "documented",
+      "adapter": ".claude/commands/gse.md",
+      "notes": "Generated command file shape is verified in fixtures; real host invocation requires host runtime evidence."
+    },
+    {
+      "host": "Custom agent runtimes",
+      "status": "documented",
+      "adapter": "runtime-specific bridge",
+      "notes": "Runtime capabilities should be verified inside the target project before being marked verified."
+    }
+  ],
+  "entrypoints": [
+    "SKILL.md",
+    "package.json",
+    "README.md",
+    "README.zh-CN.md",
+    "scripts/init-project.mjs",
+    "scripts/run-gse-command.mjs",
+    "scripts/validate-gse.mjs",
+    "scripts/audit-npm-package-metadata.mjs",
+    "scripts/audit-npm-tarball-install.mjs"
+  ],
+  "verification": [
+    "node scripts/validate-gse.mjs --root . --json",
+    "node scripts/audit-npm-package-metadata.mjs --root . --json",
+    "node scripts/audit-marketplace-discovery.mjs --root . --json",
+    "node scripts/audit-host-ui-invocation.mjs --root . --json"
+  ],
+  "distribution": {
+    "packageScript": "scripts/package-gse.mjs",
+    "installScript": "scripts/install-gse.mjs",
+    "signingScript": "scripts/sign-gse-package.mjs",
+    "trustPolicy": "references/release-trust.md"
+  },
+  "boundaries": [
+    "GSE is not a hosted service.",
+    "GSE does not require MCP, LSP, browser automation, CI access, marketplace approval, or subagent dispatch.",
+    "Marketplace approval, maintainer identity, and native host UI invocation require separate evidence."
+  ]
+}

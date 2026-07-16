@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "root": "D:\\codex\\tmp\\gse-ci-push",
+  "target": "D:\\codex\\tmp\\gse-ci-push",
+  "installedRoot": "C:\\Users\\Admin\\.codex\\skills\\gse",
+  "generatedAt": "2026-07-14T11:00:00.296Z",
+  "execute": true,
+  "out": "D:\\codex\\tmp\\gse-ci-push\\.gse\\maintenance\\latest-maintenance-snapshot.json",
+  "summary": {
+    "status": "passed",
+    "passed": 9,
+    "failed": 0,
+    "total": 9,
+    "installedSyncMode": "installed-root",
+    "releaseBundleChecked": false,
+    "packageSmoke": false
+  },
+  "workflows": {
+    "maintenanceSnapshot": "verified",
+    "installedSync": "verified",
+    "releaseBundleFreshness": "skipped"
+  },
+  "results": [
+    {
+      "id": "MS01",
+      "area": "maintenance cadence",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-maintenance-cadence.mjs --root D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 11,
+        "failed": 0,
+        "total": 11
+      },
+      "workflows": {
+        "maintenanceCadence": "verified",
+        "externalNativeSlashCommand": "external-required"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS02",
+      "area": "final-form roadmap",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-final-form-roadmap.mjs --root D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 11,
+        "failed": 0,
+        "total": 11
+      },
+      "workflows": {
+        "finalFormRoadmap": "verified"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS03",
+      "area": "state freshness",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-state-freshness.mjs --root D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "total": 6
+      },
+      "workflows": {
+        "stateFreshness": "verified",
+        "pendingGates": []
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS04",
+      "area": "continue preflight",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\run-gse-command.mjs --root D:\\codex\\tmp\\gse-ci-push --target D:\\codex\\tmp\\gse-ci-push --command /gse continue --json --compact",
+      "summary": {
+        "status": "warning",
+        "failedHardChecks": 0,
+        "warnings": 2,
+        "blockedGates": 0,
+        "riskCount": 7,
+        "activeRiskCount": 7,
+        "archivedRiskCount": 20,
+        "totalRiskCount": 27,
+        "topRiskCount": 3
+      },
+      "workflows": null,
+      "stderr": ""
+    },
+    {
+      "id": "MS05",
+      "area": "evidence levels",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-evidence-levels.mjs --root D:\\codex\\tmp\\gse-ci-push --target D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 8,
+        "failed": 0,
+        "total": 8
+      },
+      "workflows": {
+        "evidenceLevels": "verified",
+        "recordsWithLevel": 198,
+        "missingLevel": 0,
+        "downgraded": 3
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS06",
+      "area": "learning drift",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-learning-drift.mjs --root D:\\codex\\tmp\\gse-ci-push --target D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 5,
+        "warnings": 0,
+        "failed": 0,
+        "total": 5,
+        "candidates": 3,
+        "enforced": 3,
+        "unenforced": 0,
+        "highUnenforced": 0
+      },
+      "workflows": {
+        "learningDrift": "verified",
+        "enforcementCoverage": "verified"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS07",
+      "area": "public acceptance",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-public-acceptance-readiness.mjs --root D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 8,
+        "failed": 0,
+        "total": 8,
+        "pendingGates": 0,
+        "publicAccepted": "verified"
+      },
+      "workflows": {
+        "publicAcceptanceDoctor": "verified",
+        "publicAccepted": "verified"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS08",
+      "area": "installed sync",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-installed-sync.mjs --root D:\\codex\\tmp\\gse-ci-push --installed-root C:\\Users\\Admin\\.codex\\skills\\gse --json",
+      "summary": {
+        "status": "passed",
+        "passed": 8,
+        "failed": 0,
+        "total": 8
+      },
+      "workflows": {
+        "freshPackage": "verified",
+        "installedSync": "verified",
+        "installedCommandSmoke": "verified"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "MS09",
+      "area": "session sync",
+      "status": "passed",
+      "command": "C:\\Program Files\\nodejs\\node.exe D:\\codex\\tmp\\gse-ci-push\\scripts\\audit-session-sync.mjs --root D:\\codex\\tmp\\gse-ci-push --json",
+      "summary": {
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "total": 4
+      },
+      "workflows": {
+        "sessionSyncRecords": "verified",
+        "installedSyncRecorded": "recorded",
+        "requiredThreadCount": 0
+      },
+      "stderr": ""
+    }
+  ],
+  "limits": [
+    "This snapshot proves recurring maintenance checks ran at a point in time.",
+    "When writing the canonical latest-maintenance-snapshot.json, failed checks are written to latest-maintenance-snapshot.failed.json and do not overwrite the last passing snapshot.",
+    "It does not prove native host slash-command support.",
+    "Without --installed-root, installed sync is package-only and does not prove an installed copy is fresh."
+  ],
+  "writtenTo": "D:\\codex\\tmp\\gse-ci-push\\.gse\\maintenance\\latest-maintenance-snapshot.json",
+  "canonicalWritePolicy": "written"
+}

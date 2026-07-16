@@ -1,0 +1,33 @@
+name: Validate GSE
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate skill package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run GSE validation
+        run: node scripts/validate-gse.mjs --root . --profile lite --json
+
+      - name: Audit final readiness boundaries
+        run: node scripts/audit-final-readiness.mjs --root . --json
+
+      - name: Audit final acceptance packet
+        run: node scripts/audit-final-acceptance-packet.mjs --root . --json

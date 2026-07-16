@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible GSE workflow, install, validation, or host-adapter issue.
+title: "[Bug]: "
+labels: ["bug", "needs-evidence"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Minimal commands, project shape, or host steps.
+      placeholder: |
+        node scripts/validate-gse.mjs --root . --json
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Focused logs, audit output, host invocation record, or screenshots. Do not paste secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk and claim boundary
+      description: Note whether this affects install, release, public CI, native slash commands, or host support claims.
+    validations:
+      required: true

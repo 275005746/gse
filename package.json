@@ -1,0 +1,74 @@
+{
+  "name": "@t275005746/gse",
+  "version": "1.0.0",
+  "description": "Goal-Spec-Evidence Engineering workflow skill for long-running agent-assisted software projects.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/275005746/gse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/275005746/gse/issues"
+  },
+  "homepage": "https://gatehub.top/",
+  "bin": {
+    "gse": "scripts/gse.mjs"
+  },
+  "files": [
+    "AGENTS.md",
+    "SKILL.md",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "SECURITY.md",
+    "SUPPORT.md",
+    ".github",
+    ".gse/README.md",
+    ".gse/project-profile.md",
+    ".gse/quality-gates.md",
+    ".gse/gse-development-protocol.md",
+    ".gse/state.json",
+    ".gse/releases",
+    "agents",
+    "assets",
+    "examples",
+    "references",
+    "scripts"
+  ],
+  "scripts": {
+    "audit:npm": "node scripts/audit-npm-package-metadata.mjs --root . --json",
+    "audit:npm-install": "node scripts/audit-npm-tarball-install.mjs --root . --json",
+    "audit:npm-publish": "node scripts/audit-npm-publish-dry-run.mjs --root . --json",
+    "check:encoding": "node scripts/check-encoding.mjs",
+    "validate": "node scripts/validate-gse.mjs --root . --json",
+    "validate:lite": "node scripts/validate-gse.mjs --root . --profile lite --json",
+    "validate:release": "node scripts/validate-gse.mjs --root . --profile release --json",
+    "pack:dry-run": "npm pack --dry-run --json",
+    "test:smoke": "node scripts/test-smoke.mjs --root . --json",
+    "test:realworld": "node scripts/test-realworld.mjs --target . --json",
+    "validate:smoke": "node scripts/test-smoke.mjs --root . --json",
+    "validate:adoption": "node scripts/audit-adoption.mjs --root . --json",
+    "validate:target": "node scripts/audit-target-project.mjs --root . --json",
+    "validate:doc-hygiene": "node scripts/audit-document-hygiene.mjs --root . --json",
+    "audit:stage": "node scripts/audit-stage-orchestrator.mjs --root . --json",
+    "audit:entrypoint": "node scripts/audit-agent-entrypoint.mjs --root . --json",
+    "audit:context": "node scripts/audit-context-orchestrator.mjs --root . --json",
+    "audit:capabilities": "node scripts/audit-project-capability-registry.mjs --root . --target . --json"
+  },
+  "keywords": [
+    "gse",
+    "goal-spec-evidence",
+    "agent-workflow",
+    "ai-coding-agent",
+    "spec-workflow",
+    "sdd",
+    "evidence-gates",
+    "workflow"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

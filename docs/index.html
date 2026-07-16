@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GSE - Goal-Spec-Evidence Engineering</title>
+    <meta name="description" content="GSE is a Goal-Spec-Evidence Engineering workflow for long-running AI coding agent projects.">
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8fafc;
+        --fg: #111827;
+        --muted: #4b5563;
+        --line: #d1d5db;
+        --panel: #ffffff;
+        --accent: #0f766e;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f172a;
+          --fg: #f8fafc;
+          --muted: #cbd5e1;
+          --line: #334155;
+          --panel: #111827;
+          --accent: #5eead4;
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 56px 0;
+      }
+
+      header,
+      section {
+        border-bottom: 1px solid var(--line);
+        padding: 28px 0;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.2;
+        margin: 0 0 12px;
+      }
+
+      h1 { font-size: 40px; }
+      h2 { font-size: 22px; }
+
+      p { margin: 0 0 12px; color: var(--muted); }
+
+      a { color: var(--accent); }
+
+      code {
+        background: color-mix(in srgb, var(--panel), var(--line) 24%);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 2px 5px;
+      }
+
+      pre {
+        overflow: auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      ul { padding-left: 22px; }
+
+      .eyebrow {
+        color: var(--accent);
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        background: var(--panel);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">Goal-Spec-Evidence Engineering</div>
+        <h1>GSE</h1>
+        <p>GSE is a workflow skill for long-running AI coding agent projects. It keeps work anchored to goals, scoped specs, focused execution, evidence gates, and reusable learning.</p>
+        <p><a href="https://github.com/275005746/gse">GitHub repository</a> · <a href="gse-listing.json">Catalog metadata</a> · <a href="https://gatehub.top/">GateHub</a></p>
+      </header>
+
+      <section>
+        <h2>Use it for</h2>
+        <div class="grid">
+          <div class="item">Agentic engineering workflows that need continuity across sessions.</div>
+          <div class="item">Spec-driven development with explicit acceptance and evidence.</div>
+          <div class="item">Project scaffolds that can adapt to Codex, Claude Code, Hermes, WorkBuddy, and other agent hosts.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Install and validate</h2>
+        <pre><code>git clone https://github.com/275005746/gse.git
+cd gse
+node scripts/validate-gse.mjs --root . --json</code></pre>
+        <p>Package, install, signing, URL install, command routing, and release evidence checks are included in the repository.</p>
+      </section>
+
+      <section>
+        <h2>Command model</h2>
+        <ul>
+          <li><code>/gse init</code> creates a project-local <code>.gse/</code> workspace.</li>
+          <li><code>/gse continue</code> resumes from the current goal map and evidence state.</li>
+          <li><code>/gse verify</code> runs the focused validation route for the current slice.</li>
+          <li><code>/gse public-release</code> prepares public release evidence and owner actions.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Trust boundary</h2>
+        <p>This catalog page proves public discoverability for GSE. It does not by itself prove a third-party marketplace approval or host-native slash command execution. Those claims require separate evidence records.</p>
+      </section>
+
+      <section>
+        <h2>Community</h2>
+        <p>GateHub supports GSE development and contributor collaboration. Use the GitHub repository for issues, changes, release evidence, and project history.</p>
+      </section>
+    </main>
+  </body>
+</html>

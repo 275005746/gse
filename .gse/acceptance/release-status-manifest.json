@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "name": "gse",
+  "displayName": "GSE",
+  "generatedAt": "2026-07-09T04:39:50.705Z",
+  "root": "<gse-root>",
+  "claimBoundary": {
+    "publicAccepted": "verified",
+    "finalReadinessMatrix": "verified",
+    "localValidationDoesNotMeanPublicAcceptance": true,
+    "nativeSlashCommandRequiresHostRecord": true,
+    "nativeSlashCommandIsOptionalAdapterClaim": true
+  },
+  "readiness": {
+    "verified": [
+      {
+        "area": "Skill structure",
+        "status": "verified",
+        "evidence": "SKILL.md, scripts/validate-gse.mjs"
+      },
+      {
+        "area": "Project scaffold",
+        "status": "verified",
+        "evidence": "init/project doctor/close gate scripts"
+      },
+      {
+        "area": "Local install",
+        "status": "verified",
+        "evidence": "scripts/audit-distribution.mjs verifies package/install, installed validation, entrypoints.cli, and installed gse.mjs status"
+      },
+      {
+        "area": "npm tarball install",
+        "status": "verified",
+        "evidence": "scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed bin execution, and installed README audit"
+      },
+      {
+        "area": "npm publish dry-run",
+        "status": "verified",
+        "evidence": "scripts/audit-npm-publish-dry-run.mjs verifies publish dry-run metadata, CLI bin preservation, required files, and integrity fields"
+      },
+      {
+        "area": "URL install",
+        "status": "verified",
+        "evidence": "scripts/audit-remote-distribution.mjs verifies URL install, installed validation, installed gse.mjs status, and tamper rejection"
+      },
+      {
+        "area": "Signing",
+        "status": "verified",
+        "evidence": "sign/verify/audit scripts"
+      },
+      {
+        "area": "Open-source collaboration",
+        "status": "verified",
+        "evidence": "CONTRIBUTING.md, SECURITY.md, SUPPORT.md"
+      },
+      {
+        "area": "CI workflow template",
+        "status": "verified",
+        "evidence": ".github/workflows/validate-gse.yml, scripts/audit-ci-readiness.mjs"
+      },
+      {
+        "area": "Public CI run record",
+        "status": "verified",
+        "evidence": "record/audit public CI run scripts and template"
+      },
+      {
+        "area": "Public collaboration templates",
+        "status": "verified",
+        "evidence": ".github/PULL_REQUEST_TEMPLATE.md, .github/ISSUE_TEMPLATE/, scripts/audit-public-collaboration-templates.mjs"
+      },
+      {
+        "area": "Public repository settings record",
+        "status": "verified",
+        "evidence": "record/audit public repository settings scripts and template"
+      },
+      {
+        "area": "Public CI run",
+        "status": "verified",
+        "evidence": ".gse/releases/public-ci-run-pending.md"
+      },
+      {
+        "area": "Public repository settings",
+        "status": "verified",
+        "evidence": ".gse/releases/public-repository-settings-owner-required.md"
+      },
+      {
+        "area": "License decision",
+        "status": "verified",
+        "evidence": ".gse/releases/public-release-owner-required.md"
+      },
+      {
+        "area": "Public security contact record",
+        "status": "verified",
+        "evidence": "record/audit public security contact scripts and template"
+      },
+      {
+        "area": "Public security contact",
+        "status": "verified",
+        "evidence": ".gse/releases/public-security-contact-owner-required.md"
+      },
+      {
+        "area": "Public channel publication record",
+        "status": "verified",
+        "evidence": "record/audit public channel publication scripts and template"
+      },
+      {
+        "area": "Public registry publication",
+        "status": "verified",
+        "evidence": ".gse/releases/public-registry-publication-npm.md"
+      },
+      {
+        "area": "Marketplace approval",
+        "status": "verified",
+        "evidence": ".gse/releases/public-channel-publication-pending.md"
+      },
+      {
+        "area": "Portable command execution",
+        "status": "verified",
+        "evidence": "run-gse-command and audit-command-execution"
+      },
+      {
+        "area": "Host adapters",
+        "status": "verified",
+        "evidence": "command adapter generator and audit"
+      },
+      {
+        "area": "Other host runtime invocation",
+        "status": "verified",
+        "evidence": ".gse/evidence/host-invocations/2026-07-07-node-npm-package-runtime.md"
+      }
+    ],
+    "ownerRequired": [],
+    "externalRequired": [],
+    "notClaimed": [
+      {
+        "area": "Native slash command",
+        "status": "not-claimed",
+        "evidence": "optional host-native adapter claim; GSE core uses portable command execution"
+      }
+    ]
+  },
+  "distribution": {
+    "localPackage": "verified",
+    "localInstall": "verified",
+    "installedValidation": "verified",
+    "localInstalledCli": "verified",
+    "remoteInstall": "verified",
+    "remoteInstalledValidation": "verified",
+    "remoteInstalledCli": "verified",
+    "integrityGate": "verified",
+    "packageSigning": "verified",
+    "signatureVerification": "verified",
+    "releaseBundle": "verified-after-bundle-audit",
+    "bundleFiles": [
+      "release-summary.md",
+      "install-commands.md",
+      "validation-checklist.md",
+      "public-release-record.md",
+      "public-acceptance-handoff.md",
+      "host-runtime-evidence-handoff.md",
+      "release-status-manifest.json",
+      "release-owner-action-plan.md",
+      "bundle-manifest.json"
+    ]
+  },
+  "publicAcceptance": {
+    "doctor": "verified",
+    "publicAccepted": "verified",
+    "pendingGates": [],
+    "nextCommands": [],
+    "nextPreflightCommands": []
+  },
+  "hostRuntime": {
+    "recordMechanics": "verified",
+    "records": 2,
+    "closeableRecords": 2,
+    "hosts": [
+      "Codex app background thread",
+      "Node.js npm package runtime"
+    ],
+    "nativeSlashCommandRecords": 0,
+    "portableTextCommandRecords": 1,
+    "fixtureDrill": "verified",
+    "fixtureNativeSlashCommandRecords": 1,
+    "fixturePortableTextCommandRecords": 4,
+    "fixtureEvidenceIsPersistent": false
+  },
+  "artifacts": {
+    "releaseBundle": ".gse/release-bundles/gse-release-bundle-v1.0.0/",
+    "finalAcceptancePacket": ".gse/acceptance/final-acceptance-packet.md",
+    "publicAcceptanceHandoff": ".gse/acceptance/public-acceptance-handoff.md",
+    "hostRuntimeEvidenceHandoff": ".gse/acceptance/host-runtime-evidence-handoff.md",
+    "releaseStatusManifest": ".gse/acceptance/release-status-manifest.json",
+    "releaseOwnerActionPlan": ".gse/acceptance/release-owner-action-plan.md"
+  },
+  "verificationCommands": [
+    "node scripts/validate-gse.mjs --root __GSE__ --json",
+    "node scripts/audit-final-readiness.mjs --root __GSE__ --json",
+    "node scripts/audit-public-acceptance-readiness.mjs --root __GSE__ --json",
+    "node scripts/audit-public-acceptance-command-dry-run-drill.mjs --root __GSE__ --json",
+    "node scripts/audit-host-runtime-invocations.mjs --root __GSE__ --json",
+    "node scripts/audit-host-runtime-invocation-drill.mjs --root __GSE__ --json",
+    "node scripts/audit-release-bundle.mjs --root __GSE__ --json",
+    "node scripts/audit-release-owner-action-plan.mjs --root __GSE__ --json",
+    "node scripts/audit-distribution.mjs --root __GSE__ --json",
+    "node scripts/audit-remote-distribution.mjs --root __GSE__ --json"
+  ],
+  "sourceAudits": {
+    "finalReadiness": "node scripts/audit-final-readiness.mjs --root __GSE__ --json",
+    "publicAcceptance": "node scripts/audit-public-acceptance-readiness.mjs --root __GSE__ --json",
+    "hostRuntime": "node scripts/audit-host-runtime-invocations.mjs --root __GSE__ --json",
+    "hostRuntimeDrill": "node scripts/audit-host-runtime-invocation-drill.mjs --root __GSE__ --json"
+  },
+  "limits": [
+    "This manifest is generated from local audits and evidence records.",
+    "It does not prove optional native slash-command support for any host adapter.",
+    "Owner-required and external-required gates remain incomplete until accepted evidence records promote them."
+  ]
+}

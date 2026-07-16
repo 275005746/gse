@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "projectName": "gse",
+  "mode": "enterprise",
+  "canonicalGoalSource": ".gse/gse-design-master-plan.md",
+  "canonicalPlan": ".gse/gse-design-master-plan.md",
+  "phase": "final-form",
+  "currentSummary": {
+    "status": "verified",
+    "localEngineeringReadiness": 100,
+    "fullFinalFormReadiness": 100,
+    "publicAccepted": "verified",
+    "pendingExternalGate": null,
+    "currentPlan": "GSE-169 verified locally: budget-aware context health, rollover routing, bounded context packs, result capsules, focused audits, and Lite validation are complete."
+  },
+  "currentSlice": {
+    "id": "GSE-169-context-orchestrator",
+    "outcome": "Audit context health and route long-running GSE work through bounded output, worker packets, checkpoints, and rollover.",
+    "status": "verified",
+    "nextAction": "Commit, push, create PR, and merge to main."
+  },
+  "toolStatuses": {
+    "browser": "unknown",
+    "lsp": "unknown",
+    "mcp": "unknown",
+    "subagents": "unknown",
+    "ci": "documented"
+  },
+  "lastEvidence": ".gse/evidence/2026-07-16.md",
+  "blockedGates": [],
+  "nextChecks": [
+    "node scripts/audit-context-orchestrator.mjs --root . --json",
+    "node scripts/run-gse-command.mjs --root . --target . --command \"/gse doctor\" --json",
+    "node scripts/audit-public-acceptance-readiness.mjs --root . --json",
+    "node scripts/audit-context-health.mjs --target . --session-id 019f65e7-fa54-7f52-a45e-242bcef79d0b --json",
+    "node scripts/audit-continue-preflight.mjs --root . --json",
+    "node scripts/audit-commands.mjs --root . --json",
+    "node scripts/audit-capability-execution-matrix.mjs --root . --json",
+    "node scripts/validate-gse.mjs --root . --profile lite --json",
+    "cmd /c npm run check:encoding",
+    "git diff --check"
+  ],
+  "residualRisks": [
+    "GSE can detect host context pressure and prepare rollover, but portable scripts cannot compact a live host session, prevent active-goal reinjection, or create a new Codex task.",
+    "Codex rollout JSONL is host-specific; missing or changed telemetry must degrade to unavailable without overstating health.",
+    "The historical .gse/goal-map.md is a repository ledger and currently triggers goal-payload-risk; active host goals must remain an 8-12 line execution index instead of copying this file.",
+    "Context pack and result capsule budgets protect coordinator headroom; they do not guarantee lower total token cost or prove real subagent execution."
+  ],
+  "riskArchive": [
+    {
+      "archivedAt": "2026-07-10",
+      "risk": "0.1.1 is already published and immutable; release metadata changes must publish a new semver version.",
+      "resolution": "GSE-147 uses 0.1.2 as the publish target."
+    },
+    {
+      "archivedAt": "2026-07-10",
+      "risk": "Session sync records prove notification attempts and honest outcomes, not that another running session adopted the capability immediately.",
+      "resolution": "GSE-146 surfaces compactState.sessionSyncBoundary and CP21 so adoption is false unless an explicit adoption record exists."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "The final-form roadmap contract is not itself final-form completion; live claims still come from references/final-readiness.md and audit-final-readiness.mjs.",
+      "resolution": "Preserved through /gse continue blockedGates and final-readiness claim boundary."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "The next implementation slice must reduce long prompt dependence through /gse continue hard preflight, not add more prose-only guidance.",
+      "resolution": "Implemented by scripts/generate-continue-packet.mjs and /gse continue routing."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Use /gse doctor and audit-public-acceptance-readiness.mjs as the source of truth for pending final-form public gates.",
+      "resolution": "Integrated into continue packet ownerExternalGateSummary and blockedGates."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "The final-form plan could be interpreted as only the remaining owner/external release gates.",
+      "resolution": "references/final-form-roadmap.md now contains Wave 1-5 execution plan and current gap list for local engineering and external evidence."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Project guard automation is the next local engineering gap: repeated real-project lessons must become preflight guard items instead of reminder prose.",
+      "resolution": "Implemented as soft project guard preflight through .gse/project-guards.md, audit-project-guards.mjs, scaffold generation, and /gse continue CP11."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Evidence level granularity still needs sharper UI/browser/API/CI labels.",
+      "resolution": "Implemented through evidenceLevel and requiredEvidenceLevel taxonomy, audit-evidence-levels.mjs, /gse continue CP12, and close gate CG09."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Role and dispatch fallback packets need stronger default output and no-fake-dispatch checks.",
+      "resolution": "Implemented through role-dispatch-fallback.md, role-fallback-packet.md, .gse/agents/role-fallback-packets.md, audit-role-dispatch-fallback.mjs, and /gse continue CP13."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Downgraded evidence is now visible before continue/close, but each project decides whether a downgrade blocks close.",
+      "resolution": "Preserved through evidenceLevel and requiredEvidenceLevel warnings."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Use /gse doctor and audit-public-acceptance-readiness.mjs as the source of truth for current final-form external gates.",
+      "resolution": "Preserved as the public/external acceptance route while state repair handles local state/evidence drift."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "State/evidence repair is intentionally conservative: invalid JSON/JSONL is reported with concrete actions, not guessed or overwritten.",
+      "resolution": "GSE-115 implemented /gse repair and CP14; the remaining risk is now bounded as a deliberate repair policy."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Automatic /gse repair writes are limited to reversible residual-risk compaction with .gse/backups; stale next-action drift remains a deliberate update.",
+      "resolution": "GSE-115 verified execute-gated residual-risk compaction and kept stale next-action repair deliberate."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Learning promotion writes candidate-only .gse/learning-promotions.md output; guards, gates, templates, scripts, and skill updates still require deliberate follow-up changes.",
+      "resolution": "GSE-116 implemented candidate-only learning promotion; deliberate follow-up remains as normal slice work rather than an active blocker."
+    },
+    {
+      "archivedAt": "2026-07-08",
+      "risk": "Classification is deterministic and project-generic, not a human semantic review.",
+      "resolution": "GSE-116 bounded classification as routing evidence and preserved human review for actual guard/gate/script mutations."
+    },
+    {
+      "archivedAt": "2026-07-09",
+      "risk": "Role fallback packets prove auditable sequential role boundaries, not real subagent execution.",
+      "resolution": "Preserved by role fallback packets, no-fake-dispatch close gate, and host capability records; no longer needs default active risk display."
+    },
+    {
+      "archivedAt": "2026-07-09",
+      "risk": "AION and MuseFlow drill warnings are project-local readiness signals; GSE behavior must stay project-generic and must not mutate target projects during read-only drills.",
+      "resolution": "Preserved by target hardening drill limits and maintenance cadence; no longer needs default active risk display."
+    },
+    {
+      "archivedAt": "2026-07-09",
+      "risk": "Installed sync evidence proves local source/package/installed-copy parity only at the time of the audit; it does not publish a package or prove host-native slash-command support.",
+      "resolution": "Archived by GSE state repair to keep active residual risks compact."
+    },
+    {
+      "archivedAt": "2026-07-09",
+      "risk": "UI/browser evidence policy proves evidence labeling and downgrade surfacing only; target-project visible UI claims still need real browser or screenshot-backed proof.",
+      "resolution": "Archived by GSE state repair to keep active residual risks compact."
+    },
+    {
+      "archivedAt": "2026-07-09",
+      "risk": "Maintenance snapshots are point-in-time freshness evidence; future capability edits must regenerate the snapshot, release bundle, and installed copy.",
+      "resolution": "Archived by GSE state repair to keep active residual risks compact."
+    }
+  ]
+}

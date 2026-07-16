@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-09T04:45:24.926Z",
+  "root": "<gse-root>",
+  "publicAccepted": "verified",
+  "pendingGateCount": 0,
+  "generatedFresh": {
+    "finalAcceptancePacket": true,
+    "publicAcceptanceHandoff": true,
+    "hostRuntimeEvidenceHandoff": true,
+    "releaseStatusManifest": true,
+    "releaseOwnerActionPlan": true
+  },
+  "gates": [],
+  "limits": [
+    "Kit generation does not choose a license.",
+    "Kit generation does not publish a package or approve a marketplace listing.",
+    "Kit generation does not prove host-native slash-command support."
+  ]
+}

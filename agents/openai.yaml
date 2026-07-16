@@ -1,0 +1,4 @@
+interface:
+  display_name: "GSE"
+  short_description: "Goal-Spec-Evidence workflow system"
+  default_prompt: "Use $gse to standardize this project with goal maps, specs, evidence gates, and focused verification."

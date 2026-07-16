@@ -1,0 +1,21 @@
+{
+  "name": "gse-cli-tool-fixture",
+  "version": "0.0.0-fixture",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "gse-fixture": "./src/cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "smoke": "node ./src/cli.mjs --help",
+    "build": "tsc -p tsconfig.json",
+    "release:dry-run": "npm pack --dry-run"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "eslint": "^9.0.0"
+  }
+}
