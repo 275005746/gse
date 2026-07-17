@@ -2,6 +2,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { executeTransaction } from './core/persistence/transaction.mjs'
+import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+
 const args = process.argv.slice(2)
 
 function readArg(name, fallback = null) {
@@ -102,14 +105,26 @@ function renderJson(value) {
   return JSON.stringify(value, null, 2) + '\n'
 }
 
+const pendingCanonicalWrites = []
+
 function writeIfMissing(relativePath, content) {
   const filePath = path.join(gseDir, relativePath)
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  if (!force && fs.existsSync(filePath)) {
+  const canonical = relativePath === 'state.json' || relativePath === 'evidence/index.jsonl'
+  const replaceBootstrapState = relativePath === 'state.json' && bootstrappedState
+  if (!force && fs.existsSync(filePath) && !replaceBootstrapState) {
     return { relativePath, status: 'skipped' }
   }
+  if (canonical) {
+    pendingCanonicalWrites.push({
+      kind: relativePath === 'state.json' ? 'json-replace' : 'jsonl-append',
+      path: `.gse/${relativePath}`,
+      ...(relativePath === 'state.json' ? { value: JSON.parse(content) } : { event: { ...JSON.parse(content), eventId: `adoption-${date}-${mode}`, recordType: 'adoption' } }),
+    })
+    return { relativePath, status: fs.existsSync(filePath) ? (force ? 'written-or-overwritten' : 'written') : 'written' }
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(filePath, content.trimStart().replace(/\n/g, '\r\n'), 'utf8')
-  return { relativePath, status: 'written' }
+  return { relativePath, status: fs.existsSync(filePath) ? (force ? 'written-or-overwritten' : 'written') : 'failed' }
 }
 
 function writeProjectFileIfMissing(relativePath, content) {
@@ -165,6 +180,11 @@ fs.mkdirSync(path.join(gseDir, 'changes'), { recursive: true })
 fs.mkdirSync(path.join(gseDir, 'evidence'), { recursive: true })
 fs.mkdirSync(path.join(gseDir, 'templates'), { recursive: true })
 fs.mkdirSync(path.join(gseDir, 'goals'), { recursive: true })
+
+const bootstrappedState = !exists('.gse/state.json')
+if (bootstrappedState) {
+  fs.writeFileSync(path.join(gseDir, 'state.json'), JSON.stringify({ schemaVersion: 1, stateRevision: 0, activeChangeId: null }) + '\n', 'utf8')
+}
 
 if (mode === 'standard' || mode === 'enterprise') {
   for (const dir of ['agents', 'skills', 'lsp']) {
@@ -892,6 +912,19 @@ Record optional host plugins and runtime adapters here. Plugins are never inferr
 for (const host of selectedHostAdapters()) {
   const config = hostAdapterConfigs[host]
   results.push(writeProjectFileIfMissing(config.path, renderHostAdapter(config)))
+}
+
+if (pendingCanonicalWrites.length > 0) {
+  const state = safeJson('.gse/state.json') ?? { schemaVersion: 1, stateRevision: 0, activeChangeId: null }
+  const transaction = await executeTransaction({
+    target,
+    operationId: `init-project-${date}`,
+    expectedRevision: state.stateRevision,
+    writes: pendingCanonicalWrites.filter((write) => write.kind !== 'jsonl-append'),
+    events: pendingCanonicalWrites.filter((write) => write.kind === 'jsonl-append').map((write) => ({ path: write.path, event: write.event })),
+    allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
+  })
+  if (transaction.status !== 'complete') throw new Error(transaction.message)
 }
 
 console.log(JSON.stringify({ target, gseDir, force, requestedMode, mode, selectionReasons: autoSelection.reasons, hostAdapters: selectedHostAdapters(), results }, null, 2))

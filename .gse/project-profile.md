@@ -18,6 +18,11 @@ GSE is a portable Goal-Spec-Evidence Engineering skill for long-running agent-as
 - Structural audit: `node scripts/audit-gse.mjs --root <skill-root> --json`
 - Change pack audit: `node scripts/audit-change-system.mjs --root <skill-root> --json`
 - Close gate: `node scripts/audit-close-gate.mjs --target <skill-root> --json`
+- Core contracts: `node scripts/audit-core-contracts.mjs --root <skill-root> --json`
+- Core compatibility: `node scripts/audit-core-compatibility.mjs --root <skill-root> --json`
+- Core transactions: `node scripts/audit-core-transactions.mjs --root <skill-root> --json`
+
+All three Core audits are required before claiming Section 20 foundation behavior. Release and public acceptance remain separately authorized evidence boundaries.
 
 ## Tool Notes
 

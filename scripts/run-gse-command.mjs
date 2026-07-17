@@ -2,6 +2,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createResultEnvelope } from './core/contracts.mjs'
+import { facadeRoute } from './core/lifecycle.mjs'
 
 const args = process.argv.slice(2)
 
@@ -49,7 +51,7 @@ function runNode(script, commandArgs) {
     diagnosticSummary = null
   }
   const status = result.status ?? 1
-  const ok = status === 0 || (diagnosticSummary && diagnosticSummary.failed === 0)
+  const ok = status === 0 || Boolean(diagnosticSummary && diagnosticSummary.failed === 0)
   return {
     command: [process.execPath, path.join(root, 'scripts', script), ...commandArgs].join(' '),
     status,
@@ -95,6 +97,21 @@ const commandMap = {
     route: 'references/commands.md',
     effect: 'read-only',
     summary: 'Show GSE commands and project entry files.',
+  },
+  frame: {
+    route: 'scripts/detect-project-stage.mjs',
+    effect: 'read-only',
+    summary: 'Frame through current project discovery and first unmet gate.',
+  },
+  specify: {
+    route: 'scripts/init-change.mjs',
+    effect: 'read-only by default; write-with-execute',
+    summary: 'Specify through the existing native Change pack.',
+  },
+  build: {
+    route: 'scripts/generate-continue-packet.mjs',
+    effect: 'read-only',
+    summary: 'Build from the accepted current Change and next action.',
   },
   continue: {
     route: 'scripts/generate-continue-packet.mjs',
@@ -229,11 +246,24 @@ let execution = null
 if (execute && verb === 'init') {
   const mode = rest.includes('--mode') ? rest[rest.indexOf('--mode') + 1] : 'auto'
   execution = runNode('init-project.mjs', ['--target', target, '--mode', mode, '--json'])
+} else if (verb === 'specify') {
+  const changeId = rest.find((item) => !item.startsWith('--')) ?? 'gse-change'
+  const level = rest.includes('--level') ? rest[rest.indexOf('--level') + 1] : 'standard'
+  execution = execute
+    ? runNode('init-change.mjs', ['--target', target, '--change-id', changeId, '--level', level, '--json'])
+    : {
+        command: [process.execPath, path.join(root, 'scripts', 'init-change.mjs'), '--target', target, '--change-id', changeId, '--level', level, '--json'].join(' '),
+        status: 0,
+        ok: true,
+        diagnosticSummary: { status: 'passed', failed: 0, total: 1 },
+        stdout: JSON.stringify({ status: 'preview', changeId, level, writes: { performed: false } }),
+        stderr: '',
+      }
 } else if (execute && verb === 'change') {
   const changeId = rest.find((item) => !item.startsWith('--')) ?? 'gse-change'
   const level = rest.includes('--level') ? rest[rest.indexOf('--level') + 1] : 'standard'
   execution = runNode('init-change.mjs', ['--target', target, '--change-id', changeId, '--level', level, '--json'])
-} else if (verb === 'stage') {
+} else if (verb === 'frame' || verb === 'stage') {
   const intent = rest.filter((item) => !item.startsWith('--')).join(' ')
   execution = runNode('detect-project-stage.mjs', ['--root', root, '--target', target, '--intent', intent, '--json'])
 } else if (verb === 'discover') {
@@ -269,7 +299,7 @@ if (execute && verb === 'init') {
     if (execute) discoveryArgs.push('--execute')
     execution = runNode('generate-goal-discovery-packet.mjs', discoveryArgs)
   }
-} else if (verb === 'continue' || verb === 'next') {
+} else if (verb === 'build' || verb === 'continue' || verb === 'next') {
   const continueArgs = ['--root', root, '--target', target, '--json']
   if (rest.includes('--brief')) continueArgs.push('--brief')
   if (rest.includes('--doctor') || rest.includes('--full')) continueArgs.push('--doctor')
@@ -607,6 +637,37 @@ if (execute && verb === 'init') {
   }
 }
 
+const facadeStage = facadeRoute(verb) ? verb : null
+const parsedChangeId = (verb === 'specify' || verb === 'change')
+  ? (rest.find((item) => !item.startsWith('--')) ?? 'gse-change')
+  : null
+const childDiagnostics = execution?.diagnosticSummary
+  ? [{ code: execution.ok ? 'LEGACY_ROUTE_OK' : 'LEGACY_ROUTE_FAILED', field: 'execution' }]
+  : []
+const coreResult = createResultEnvelope({
+  status: execution?.ok
+    ? (verb === 'close' ? 'complete' : 'proceed')
+    : verb === 'verify'
+      ? 'repair'
+      : 'blocked',
+  stage: facadeStage,
+  reasonCode: verb === 'release'
+    ? 'POST_CLOSE_RELEASE'
+    : execution?.ok
+      ? 'READY'
+      : 'LEGACY_ROUTE_FAILED',
+  message: verb === 'release'
+    ? 'Release remains a separately authorized post-Close flow.'
+    : execution?.ok
+      ? `${facadeStage || verb} route completed.`
+      : `${verb} route requires attention.`,
+  changeId: state?.activeChangeId ?? parsedChangeId,
+  stateRevision: state?.stateRevision ?? null,
+  requiredActions: execution?.ok ? [] : ['Inspect the legacy route diagnostics and repair the reported failure.'],
+  diagnostics: childDiagnostics,
+  safeToRetry: verb !== 'close' || !execution?.ok,
+})
+
 const report = {
   root,
   target,
@@ -628,6 +689,7 @@ const report = {
     goalMapRole: 'gse-execution-projection',
   },
   execution,
+  coreResult,
   limits: [
     'This runner executes portable GSE command semantics.',
     'It does not prove a host UI accepted a native slash command unless the host invokes this runner or a host smoke records that behavior.',

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    "lite",
+    "standard",
+    "enterprise"
+  ],
+  "legacyLevels": {
+    "1": "lite",
+    "2": "standard",
+    "3": "enterprise",
+    "level-1": "lite",
+    "level-2": "standard",
+    "level-3": "enterprise",
+    "lite": "lite",
+    "standard": "standard",
+    "enterprise": "enterprise"
+  },
+  "triggers": [
+    {
+      "id": "COMPLEXITY_THREE_MODULES",
+      "dimension": "complexity",
+      "input": "touchesThreeOrMoreModules",
+      "profileFloor": "standard",
+      "hard": false,
+      "downgradeable": true,
+      "unknownBehavior": "ignore",
+      "policies": [
+        "focused-integration"
+      ]
+    },
+    {
+      "id": "COORDINATION_MULTIPLE_SESSIONS",
+      "dimension": "coordination",
+      "input": "multipleSessions",
+      "profileFloor": "enterprise",
+      "hard": false,
+      "downgradeable": true,
+      "unknownBehavior": "ignore",
+      "policies": [
+        "durable-handoff"
+      ]
+    },
+    {
+      "id": "RISK_AUTH_TRUST",
+      "dimension": "risk",
+      "input": "authenticationAuthorizationOrTrust",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "security-review",
+        "claim-matched-verification"
+      ]
+    },
+    {
+      "id": "RISK_PAYMENTS",
+      "dimension": "risk",
+      "input": "paymentsOrMoney",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "financial-integrity"
+      ]
+    },
+    {
+      "id": "RISK_SENSITIVE_DATA",
+      "dimension": "risk",
+      "input": "sensitiveOrRegulatedData",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "privacy-review"
+      ]
+    },
+    {
+      "id": "RISK_IRREVERSIBLE_MIGRATION",
+      "dimension": "risk",
+      "input": "irreversibleOrProductionMigration",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "rollback-proof"
+      ]
+    },
+    {
+      "id": "RISK_PUBLIC_CONTRACT",
+      "dimension": "risk",
+      "input": "publicApiSchemaOrProtocol",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "compatibility-review"
+      ]
+    },
+    {
+      "id": "RISK_PRODUCTION_RELEASE",
+      "dimension": "risk",
+      "input": "productionReleaseOrDeployment",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "separate-release-authorization"
+      ]
+    },
+    {
+      "id": "RISK_COMPLIANCE_LEGAL",
+      "dimension": "risk",
+      "input": "complianceOrLegal",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "owner-decision"
+      ]
+    },
+    {
+      "id": "RISK_INFRA_BLAST_RADIUS",
+      "dimension": "risk",
+      "input": "highBlastRadiusInfrastructure",
+      "profileFloor": "enterprise",
+      "hard": true,
+      "downgradeable": false,
+      "unknownBehavior": "ask_user",
+      "policies": [
+        "rollback-proof",
+        "independent-review"
+      ]
+    }
+  ]
+}

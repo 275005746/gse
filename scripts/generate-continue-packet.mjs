@@ -14,6 +14,7 @@ import { readHostCapabilities } from './audit-host-capabilities.mjs'
 import { auditToolFallbackPolicy } from './audit-tool-fallback-policy.mjs'
 import { findCanonicalGoalSource } from './canonical-goal-source.mjs'
 import { analyzeCanonicalGoalSourceHygiene } from './document-hygiene.mjs'
+import { internalTaskRouting } from './context-health.mjs'
 
 const args = process.argv.slice(2)
 
@@ -680,10 +681,49 @@ function buildNextSliceMode(state) {
   }
 }
 
+function planUnitTaskRouting() {
+  return {
+    workClass: 'plan-unit',
+    scope: 'top-level',
+    visibility: 'user-visible',
+    persistence: 'global-task-eligible',
+    globalTaskEligible: true,
+    actionKind: null,
+  }
+}
+
+const INTERNAL_ACTION_KINDS = Object.freeze([
+  'read',
+  'search',
+  'probe',
+  'test',
+  'spec-review',
+  'quality-review',
+  'retry',
+  'fix-attempt',
+  'context-rollover',
+  'continue-current-slice',
+  'preflight-repair',
+  'claim-evidence',
+])
+
+const EXECUTION_POLICY = Object.freeze({
+  globalTaskRule: 'top-level-plan-units-only',
+  operationalPersistence: 'internal-only',
+  internalActionKinds: INTERNAL_ACTION_KINDS,
+  reviewCycle: Object.freeze({
+    normalSpecReviewPasses: 1,
+    normalQualityReviewPasses: 1,
+    rereviewTrigger: 'confirmed-finding-and-repair',
+    reviewPersistence: 'internal-only',
+    globalTaskEligible: false,
+  }),
+})
+
 function shortText(value, maxLength = 180) {
   const normalized = String(value || '').replace(/`/g, '').replace(/\s+/g, ' ').trim()
   if (normalized.length <= maxLength) return normalized
-  return normalized.slice(0, maxLength - 1).trimEnd() + '鈥?
+  return normalized.slice(0, maxLength - 1).trimEnd() + '…'
 }
 
 function fullCandidateReason(value) {
@@ -1122,6 +1162,7 @@ function buildNextSliceCandidates(target, state, nextSliceMode, productProgressD
       acceptanceHint: candidate.acceptanceHint,
       actionPacket: buildCandidateActionPacket(candidate),
       suggestedProfile: candidate.suggestedProfile,
+      taskRouting: planUnitTaskRouting(),
     }))
 }
 
@@ -1148,8 +1189,8 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
 
   const firstStepsByAction = {
     'context-rollover': [
-      'Stop expanding the current task and finish only the current atomic operation.',
-      'Generate a bounded context checkpoint and continue the recorded next action in a fresh task.',
+      'Stop expanding the current plan unit and finish only the current atomic operation.',
+      'Generate a bounded context checkpoint and continue the recorded next action in a fresh execution context within the same top-level plan unit.',
     ],
     'repair-preflight': [
       'Stop implementation and repair the hard preflight failures first.',
@@ -1171,12 +1212,23 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
     ],
   }
 
+  const routingActionKind = {
+    'context-rollover': 'context-rollover',
+    'repair-preflight': 'preflight-repair',
+    'collect-claim-evidence': 'claim-evidence',
+    'continue-current-slice': 'continue-current-slice',
+  }[recommendedAction]
+  const taskRouting = recommendedAction === 'open-next-slice'
+    ? planUnitTaskRouting()
+    : internalTaskRouting(routingActionKind)
+
   return {
     mode: 'no-goal-mode',
     intent: 'Use this packet when the user says continue in an ordinary chat session without Codex Goal Mode or another host scheduler.',
     preflightStatus,
     canProceed: !hasHardFailure,
     recommendedAction,
+    taskRouting,
     selectedCandidate: shouldOpenNextSlice
       ? {
           id: firstCandidate.id,
@@ -1185,6 +1237,7 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
           reason: firstCandidate.reason,
           actionPacket: firstCandidate.actionPacket,
           suggestedProfile: firstCandidate.suggestedProfile,
+          taskRouting: firstCandidate.taskRouting,
         }
       : null,
     currentSlice: compactState.currentSlice,
@@ -1261,8 +1314,8 @@ function createFixture(options = {}) {
       currentSlice: {
         id: 'fixture-continue',
         outcome: 'Fixture continue packet.',
-        status: 'planned',
-        nextAction: 'Run fixture smoke.',
+        status: options.verifiedSlice ? 'verified' : 'planned',
+        nextAction: options.verifiedSlice ? 'Open the next user-visible fixture slice.' : 'Run fixture smoke.',
       },
       toolStatuses: {
         browser: 'unknown',
@@ -1271,7 +1324,7 @@ function createFixture(options = {}) {
         subagents: 'unknown',
         ci: 'unknown',
       },
-      lastEvidence: '.gse/evidence/index.jsonl',
+      lastEvidence: '.gse/evidence/2026-07-08.md',
       residualRisks: [
         'Fixture top risk 1.',
         'Fixture top risk 2.',
@@ -1298,10 +1351,17 @@ function createFixture(options = {}) {
       }) + '\n',
     'utf8',
   )
+  if (!options.invalidEvidence) {
+    fs.writeFileSync(
+      path.join(dir, '.gse', 'evidence', '2026-07-08.md'),
+      '# Fixture Evidence\n\nVerified fixture continuation.\n',
+      'utf8',
+    )
+  }
   return dir
 }
 
-function buildContinuePacket(target) {
+async function buildContinuePacket(target) {
   const resolvedTarget = path.resolve(target)
   const gseDir = path.join(resolvedTarget, '.gse')
   const stateResult = readJson(path.join(gseDir, 'state.json'))
@@ -1312,7 +1372,7 @@ function buildContinuePacket(target) {
   const canonicalPlan = findCanonicalPlan(resolvedTarget, state)
   const projectGuards = readProjectGuards(resolvedTarget)
   const roleFallback = readRoleDispatchFallback(resolvedTarget)
-  const stateRepair = auditStateRepair(resolvedTarget)
+  const stateRepair = await auditStateRepair(resolvedTarget)
   const learningPromotion = analyzeLearningPromotions(resolvedTarget)
   const learningDrift = auditLearningDrift(resolvedTarget)
   const hostCapabilities = readHostCapabilities(resolvedTarget)
@@ -1608,6 +1668,7 @@ function buildContinuePacket(target) {
     gateTaxonomy,
     nextSliceMode,
     nextSliceCandidates,
+    executionPolicy: EXECUTION_POLICY,
     nextChecks,
     productProgressDrift,
     productOutcomeGate,
@@ -1892,8 +1953,13 @@ function renderDoctorMarkdown(report) {
   return lines.join('\n') + '\n'
 }
 
-const target = selfTest ? createFixture({ invalidEvidence: args.includes('--invalid-evidence-fixture') }) : targetArg
-const report = buildContinuePacket(target)
+const target = selfTest ? createFixture({
+  invalidEvidence: args.includes('--invalid-evidence-fixture'),
+  verifiedSlice: args.includes('--verified-slice-fixture'),
+}) : targetArg
+const report = await buildContinuePacket(target)
+
+if (selfTest) fs.rmSync(target, { recursive: true, force: true })
 
 if (jsonOnly) console.log(JSON.stringify(report, null, 2))
 else console.log(renderMarkdown(report))

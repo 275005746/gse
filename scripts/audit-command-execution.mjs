@@ -77,6 +77,9 @@ const discoveryPromoteRun = run('run-gse-command.mjs', ['--root', root, '--targe
 const discoveryPromote = parseJson(discoveryPromoteRun.stdout)
 const discoveryPromoteData = parseJson(discoveryPromote?.execution?.stdout || '')
 const repairRun = run('run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse repair', '--json'])
+const frameRun = run('run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse frame', '--json'])
+const specifyRun = run('run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse specify facade-change --level standard', '--json'])
+const buildRun = run('run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse build', '--json'])
 const shortCliRun = run('gse.mjs', ['status', '--target', target, '--json'])
 
 const full = profile === 'full'
@@ -117,6 +120,9 @@ const help = parseJson(helpRun.stdout)
 const cont = parseJson(continueRun.stdout)
 const stage = parseJson(stageRun.stdout)
 const repair = parseJson(repairRun.stdout)
+const frame = parseJson(frameRun.stdout)
+const specify = parseJson(specifyRun.stdout)
+const build = parseJson(buildRun.stdout)
 const status = statusRun ? parseJson(statusRun.stdout) : null
 const doctor = doctorRun ? parseJson(doctorRun.stdout) : null
 const acceptance = acceptanceRun ? parseJson(acceptanceRun.stdout) : null
@@ -176,6 +182,9 @@ const liteChecks = [
   check('CMDX05f', '/gse discover selection previews promotion without writes', discoverySelectRun.status === 0 && discoverySelectData?.status === 'promotion-preview' && discoverySelectData?.writes?.performed === false && !fs.existsSync(path.join(target, '.gse', 'changes', 'command-cover-minimal-proof')), '/gse discover --session <id> --select <path> --promote'),
   check('CMDX05g', '/gse discover explicitly promotes selected path into Goal Spec', discoveryPromoteRun.status === 0 && discoveryPromoteData?.status === 'promoted' && fs.existsSync(path.join(target, '.gse', 'changes', 'command-cover-proof', 'spec.md')), '/gse discover --session <id> --select <path> --promote --execute'),
   check('CMDX05c', '/gse repair executes state/evidence repair audit in read-only mode', repairRun.status === 0 && repair?.execution?.status === 0 && repair?.execution?.command?.includes('audit-state-repair.mjs') && repair?.execution?.stdout?.includes('"repairActions"'), '/gse repair'),
+  check('CMDX16', '/gse frame routes to current-stage detection and returns a v1 envelope', frameRun.status === 0 && frame?.coreResult?.stage === 'frame' && frame?.execution?.command?.includes('detect-project-stage.mjs'), '/gse frame'),
+  check('CMDX17', '/gse specify previews the existing Change route without writes', specifyRun.status === 0 && specify?.coreResult?.stage === 'specify' && specify?.execution?.command?.includes('init-change.mjs') && !fs.existsSync(path.join(target, '.gse', 'changes', 'facade-change')), '/gse specify'),
+  check('CMDX18', '/gse build routes to continuation and returns a build envelope', buildRun.status === 0 && build?.coreResult?.stage === 'build' && build?.execution?.command?.includes('generate-continue-packet.mjs'), '/gse build'),
   check('CMDX05b', 'short CLI wrapper routes to portable command runner', shortCliRun.status === 0 && shortCliRun.stdout.includes('"/gse status"') && shortCliRun.stdout.includes('"stateValid": true'), 'scripts/gse.mjs status --target <target> --json'),
 ]
 
@@ -199,8 +208,11 @@ const fullChecks = full
       check('CMDX08i', '/gse public-release --execute writes the requested checklist output', publicReleaseExecuteRun.status === 0 && publicReleaseExecuteReport?.execution?.status === 0 && publicReleaseExecuteData?.status === 'written' && publicReleaseExecuteData?.dryRun === false && fs.existsSync(publicReleaseExecuteOut) && fs.readFileSync(publicReleaseExecuteOut, 'utf8').includes('GSE Public Release Checklist'), '/gse public-release --execute --out <tmp>'),
       check('CMDX09', '/gse doctor falls back to target project doctor for normal projects', diagnosticOk(doctorTargetRun, doctorTarget) && doctorTarget?.execution?.command?.includes('audit-target-project.mjs'), '/gse doctor on fixture target'),
       check('CMDX10', '/gse verify executes validation profile runner', verifyRun.status === 0 && verify?.execution?.status === 0 && verify?.execution?.stdout?.includes('"profile": "lite"') && verify?.execution?.stdout?.includes('"validationProfile": "verified"'), '/gse verify --profile lite'),
+      check('CMDX19', '/gse verify retains validation routing and adds a verify envelope', verify?.coreResult?.stage === 'verify', '/gse verify'),
       check('CMDX11', '/gse audit executes target project doctor', diagnosticOk(auditRun, audit), '/gse audit'),
       check('CMDX12', '/gse close executes close gate', diagnosticOk(closeRun, close), '/gse close'),
+      check('CMDX20', '/gse close remains a readiness check and adds a close envelope', close?.coreResult?.stage === 'close' && !close?.execution?.command?.includes('release'), '/gse close'),
+      check('CMDX21', 'release remains post-Close and outside the five-stage facade', releaseDryRunReport?.coreResult?.stage === null && releaseDryRunReport?.coreResult?.reasonCode === 'POST_CLOSE_RELEASE', '/gse release'),
       check('CMDX13', '/gse change executes change pack creation only with --execute', changeRun.status === 0 && change?.execution?.status === 0 && fs.existsSync(path.join(target, '.gse', 'changes', 'add-login', 'brief.md')), '/gse change --execute'),
       check('CMDX14', '/gse repair --execute performs reversible residual risk compaction only when requested', repairExecuteRun.status === 0 && repairExecute?.execution?.status === 0 && repairExecuteData?.summary?.writes === 1 && repairExecuteData?.writes?.some((item) => item.action === 'compact-residual-risks') && fs.existsSync(path.join(target, '.gse', 'backups')), '/gse repair --execute'),
     ]
@@ -209,7 +221,7 @@ const fullChecks = full
 const checks = [...liteChecks, ...fullChecks]
 const passed = checks.filter((item) => item.status === 'passed').length
 const failed = checks.length - passed
-const commandRuns = [initRun, adapterRun, helpRun, continueRun, stageRun, discoverRun, discoverySelectRun, discoveryPromoteRun, repairRun, shortCliRun, statusRun, doctorRun, acceptanceRun, ownerActionsRun, ownerActionsCompactRun, probeWaitingRun, probeRejectRun, releaseDryRun, releaseExecuteRun, packageDryRun, packageExecuteRun, installDryRun, installExecuteRun, publicReleaseDryRun, publicReleaseExecuteRun, doctorTargetRun, verifyRun, auditRun, closeRun, changeRun, repairExecuteRun].filter(Boolean)
+const commandRuns = [initRun, adapterRun, helpRun, continueRun, stageRun, discoverRun, discoverySelectRun, discoveryPromoteRun, repairRun, frameRun, specifyRun, buildRun, shortCliRun, statusRun, doctorRun, acceptanceRun, ownerActionsRun, ownerActionsCompactRun, probeWaitingRun, probeRejectRun, releaseDryRun, releaseExecuteRun, packageDryRun, packageExecuteRun, installDryRun, installExecuteRun, publicReleaseDryRun, publicReleaseExecuteRun, doctorTargetRun, verifyRun, auditRun, closeRun, changeRun, repairExecuteRun].filter(Boolean)
 const report = {
   root,
   generatedAt: new Date().toISOString(),

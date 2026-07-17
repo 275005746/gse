@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "stateRevision": 0,
+  "projectName": "Enterprise Trust Project",
+  "mode": "enterprise",
+  "phase": "planning",
+  "currentSummary": "Harden authentication and authorization trust decisions before release.",
+  "currentSlice": "auth change",
+  "activeChangeId": "secure-login",
+  "updatedAt": "2026-07-16T00:00:00.000Z"
+}

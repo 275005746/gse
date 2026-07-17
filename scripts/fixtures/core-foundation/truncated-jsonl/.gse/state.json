@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "stateRevision": 0,
+  "projectName": "Truncated JSONL Project",
+  "mode": "standard",
+  "phase": "verification",
+  "currentSummary": "Parse committed records and quarantine an incomplete tail.",
+  "currentSlice": "verification",
+  "activeChangeId": null,
+  "updatedAt": "2026-07-16T00:00:00.000Z"
+}

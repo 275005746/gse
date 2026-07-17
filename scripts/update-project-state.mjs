@@ -4,6 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+import { executeTransaction } from './core/persistence/transaction.mjs'
+import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+
 const args = process.argv.slice(2)
 
 function readArg(name, fallback = null) {
@@ -139,7 +142,7 @@ function buildState(target) {
   }
 }
 
-function updateProject(target) {
+async function updateProject(target) {
   const resolvedTarget = path.resolve(target)
   const results = []
   const warnings = []
@@ -161,19 +164,40 @@ function updateProject(target) {
   const sparseWarning = detectSparseWarning(resolvedTarget)
   if (sparseWarning) warnings.push(sparseWarning)
 
-  const stateContent = JSON.stringify(buildState(resolvedTarget), null, 2) + '\n'
-  const evidenceIndexRecord = JSON.stringify({
+  const evidenceIndexRecord = {
+    eventId: `adoption-update-${date}`,
     date,
+    timestamp: new Date().toISOString(),
     recordType: 'adoption',
     status: 'result',
+    evidenceLevel: 'result',
+    requiredEvidenceLevel: 'result',
     summary: 'Added GSE machine-readable state and evidence index for an existing project.',
     evidenceFile: `.gse/evidence/${date}.md`,
     commands: ['node <gse-skill>/scripts/update-project-state.mjs --target <project-root>'],
     nextAction: 'Run target doctor, generate-session-prompt, and close gate to verify project-local readiness.',
-  }) + '\n'
+  }
 
-  writeFile(resolvedTarget, '.gse/state.json', stateContent, results)
-  writeFile(resolvedTarget, '.gse/evidence/index.jsonl', evidenceIndexRecord, results)
+  const stateData = state.ok ? state.data : { schemaVersion: 1, stateRevision: 0, activeChangeId: null }
+  if (!state.exists && !dryRun) {
+    fs.writeFileSync(path.join(resolvedTarget, '.gse', 'state.json'), JSON.stringify(stateData) + '\n', 'utf8')
+  }
+  if (dryRun) {
+    writeFile(resolvedTarget, '.gse/state.json', JSON.stringify(buildState(resolvedTarget), null, 2) + '\n', results)
+    writeFile(resolvedTarget, '.gse/evidence/index.jsonl', JSON.stringify(evidenceIndexRecord) + '\n', results)
+  } else {
+    const transaction = await executeTransaction({
+      target: resolvedTarget,
+      operationId: `update-project-state-${date}`,
+      expectedRevision: stateData.stateRevision,
+      writes: [{ kind: 'json-replace', path: '.gse/state.json', value: buildState(resolvedTarget) }],
+      events: [{ path: '.gse/evidence/index.jsonl', event: evidenceIndexRecord }],
+      allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
+    })
+    if (transaction.status !== 'complete') throw new Error(transaction.message)
+    results.push({ relativePath: '.gse/state.json', status: 'written' })
+    results.push({ relativePath: '.gse/evidence/index.jsonl', status: 'written' })
+  }
 
   const written = results.filter((item) => ['written', 'overwritten', 'would-write'].includes(item.status)).length
   const skipped = results.filter((item) => ['skipped', 'would-skip'].includes(item.status)).length

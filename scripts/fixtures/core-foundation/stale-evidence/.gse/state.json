@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "stateRevision": 0,
+  "projectName": "Stale Evidence Project",
+  "mode": "standard",
+  "phase": "verification",
+  "currentSummary": "Verify the change against current source evidence.",
+  "currentSlice": "verification",
+  "activeChangeId": null,
+  "updatedAt": "2026-07-16T00:00:00.000Z",
+  "sourceDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

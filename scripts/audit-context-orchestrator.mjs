@@ -33,15 +33,22 @@ function run(script, commandArgs) {
   return { status: result.status ?? 1, data, stderr: (result.stderr || '').trim() }
 }
 const missing = run('audit-context-health.mjs', ['--target', fixture, '--codex-home', path.join(fixture, 'missing'), '--json'])
-const checkpoint = run('generate-context-checkpoint.mjs', ['--root', root, '--target', fixture, '--session', files.orange, '--max-tokens', '8000', '--json'])
+const checkpoint = run('generate-context-checkpoint.mjs', ['--root', root, '--target', fixture, '--session', files.orange, '--max-tokens', '8000', '--include-content', '--json'])
 const boundedCheckpoint = run('generate-context-checkpoint.mjs', ['--root', root, '--target', fixture, '--session', files.orange, '--include', 'allowed-context.md,../outside.md', '--max-tokens', '8000', '--json'])
-const continueOrange = run('run-gse-command.mjs', ['--root', root, '--target', fixture, '--command', '/gse continue --session ' + files.orange, '--json', '--compact'])
+const continueOrange = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--session', files.orange, '--json'])
+const continueRepair = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--invalid-evidence-fixture', '--json'])
+const continueVerified = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json'])
 const checks = []
 const check = (id, label, passed, evidence) => checks.push({ id, label, status: passed ? 'passed' : 'failed', evidence })
 check('CTX01', 'usage below 65 percent is green', reports.green.health === 'green', reports.green)
 check('CTX02', '65-80 percent is yellow compact mode', reports.yellow.health === 'yellow' && reports.yellow.outputMode === 'compact', reports.yellow)
 check('CTX03', 'two compactions force orange checkpoint', reports.orange.health === 'orange' && reports.orange.checkpointRequired && !reports.orange.canExpandScope, reports.orange)
-check('CTX04', 'three compactions force red rollover', reports.red.health === 'red' && reports.red.agentRoute === 'new-task-required', reports.red)
+check('CTX04', 'three compactions roll over within the same plan unit', reports.red.health === 'red'
+  && reports.red.agentRoute === 'fresh-context-same-plan-unit'
+  && reports.red.taskRouting?.workClass === 'execution-action'
+  && reports.red.taskRouting?.actionKind === 'context-rollover'
+  && reports.red.taskRouting?.persistence === 'internal-only'
+  && reports.red.taskRouting?.globalTaskEligible === false, reports.red)
 check('CTX05', 'host exhaustion sentinel is red', reports.sentinel.health === 'red' && reports.sentinel.exhaustionSentinel, reports.sentinel)
 check('CTX06', 'classification boundaries are exact', classifyContextHealth({ usedTokens: 90000, contextWindow: 100000 }).health === 'red' && classifyContextHealth({ usedTokens: 80000, contextWindow: 100000 }).health === 'orange', '80 and 90 percent')
 check('CTX07', 'missing host evidence degrades without failure', missing.status === 0 && missing.data?.status === 'unavailable' && missing.data?.health === 'unavailable', missing)
@@ -50,6 +57,8 @@ check('CTX09', 'checkpoint remains within 8000-token pack budget', checkpoint.st
 check('CTX10', 'checkpoint is dry-run by default', checkpoint.data?.output?.written === false && !fs.existsSync(checkpoint.data?.output?.path), checkpoint.data?.output)
 check('CTX11', 'result capsule is capped at 800 tokens with required fields', checkpoint.data?.resultCapsule?.maxEstimatedTokens === 800 && checkpoint.data?.resultCapsule?.requiredFields?.length === 8, checkpoint.data?.resultCapsule)
 const source = fs.readFileSync(path.join(root, 'references', 'context-orchestration.md'), 'utf8')
+const reviewSource = fs.readFileSync(path.join(root, 'references', 'review.md'), 'utf8')
+const reviewRouterSource = fs.readFileSync(path.join(root, 'references', 'review-router.md'), 'utf8')
 const commandRunner = fs.readFileSync(path.join(root, 'scripts', 'run-gse-command.mjs'), 'utf8')
 const validation = fs.readFileSync(path.join(root, 'scripts', 'run-validation-profile.mjs'), 'utf8')
 check('CTX12', 'policy documents budgets and honest subagent boundary', source.includes('max_context_pack_tokens: 8000') && source.includes('do not claim lower total token cost'), 'context-orchestration.md')
@@ -58,7 +67,55 @@ check('CTX14', 'focused audit is wired into Lite validation', validation.include
 check('CTX15', 'context pack includes only target-contained files', boundedCheckpoint.status === 0 && boundedCheckpoint.data?.contextPack?.files?.includes('allowed-context.md') && boundedCheckpoint.data?.contextPack?.rejectedFiles?.some((item) => item.path === '../outside.md' && item.reason === 'outside-target'), boundedCheckpoint.data?.contextPack)
 check('CTX16', 'orange health is consumed by continue routing', continueOrange.data?.compactState?.contextHealth?.health === 'orange' && continueOrange.data?.compactState?.contextHealth?.canExpandScope === false && continueOrange.data?.compactState?.noGoalMode?.recommendedAction === 'context-rollover', continueOrange.data?.compactState?.noGoalMode)
 check('CTX17', 'invalid max token input falls back to the fixed pack budget', boundedCheckpoint.data?.budget?.maxTokens === 8000 && boundedCheckpoint.data?.contextPack?.maxEstimatedTokens === 8000, boundedCheckpoint.data?.budget)
+check('CTX18', 'checkpoint resume keeps rollover inside the same plan unit', checkpoint.data?.taskRouting?.workClass === 'execution-action'
+  && checkpoint.data?.taskRouting?.actionKind === 'context-rollover'
+  && checkpoint.data?.taskRouting?.persistence === 'internal-only'
+  && checkpoint.data?.taskRouting?.globalTaskEligible === false
+  && checkpoint.data?.markdown?.includes('same top-level plan unit')
+  && !checkpoint.data?.markdown?.includes('Open a fresh task'), checkpoint.data)
+check('CTX19', 'ordinary continuation and repair remain internal actions', continueOrange.data?.compactState?.noGoalMode?.taskRouting?.actionKind === 'context-rollover'
+  && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === false
+  && continueRepair.data?.compactState?.noGoalMode?.taskRouting?.actionKind === 'preflight-repair'
+  && continueRepair.data?.compactState?.noGoalMode?.taskRouting?.persistence === 'internal-only'
+  && continueRepair.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === false, {
+    orange: continueOrange.data?.compactState?.noGoalMode,
+    repair: continueRepair.data?.compactState?.noGoalMode,
+  })
+check('CTX20', 'only a coherent next-slice plan unit is globally task eligible', continueVerified.status === 0
+  && continueVerified.data?.compactState?.noGoalMode?.recommendedAction === 'open-next-slice'
+  && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.workClass === 'plan-unit'
+  && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.scope === 'top-level'
+  && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.visibility === 'user-visible'
+  && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.persistence === 'global-task-eligible'
+  && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === true
+  && continueVerified.data?.compactState?.noGoalMode?.selectedCandidate?.taskRouting?.globalTaskEligible === true
+  && continueVerified.data?.compactState?.nextSliceCandidates?.every((candidate) => candidate.taskRouting?.globalTaskEligible === true), continueVerified.data?.compactState?.noGoalMode)
+const executionPolicy = continueVerified.data?.compactState?.executionPolicy
+check('CTX21', 'review cycle is bounded and internal-only', executionPolicy?.globalTaskRule === 'top-level-plan-units-only'
+  && executionPolicy?.operationalPersistence === 'internal-only'
+  && executionPolicy?.reviewCycle?.normalSpecReviewPasses === 1
+  && executionPolicy?.reviewCycle?.normalQualityReviewPasses === 1
+  && executionPolicy?.reviewCycle?.rereviewTrigger === 'confirmed-finding-and-repair'
+  && executionPolicy?.reviewCycle?.reviewPersistence === 'internal-only'
+  && executionPolicy?.reviewCycle?.globalTaskEligible === false, executionPolicy)
+const requiredInternalKinds = ['read', 'search', 'probe', 'test', 'spec-review', 'quality-review', 'retry', 'fix-attempt', 'context-rollover', 'continue-current-slice', 'preflight-repair', 'claim-evidence']
+check('CTX22', 'operational action kinds cannot become global tasks', requiredInternalKinds.every((kind) => executionPolicy?.internalActionKinds?.includes(kind))
+  && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.persistence === 'internal-only'
+  && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === false, executionPolicy)
+check('CTX23', 'policy documents top-level task and bounded review boundaries', source.includes('same top-level plan unit')
+  && source.includes('internal-only')
+  && !source.includes('new task required')
+  && reviewSource.includes('one bounded specification-compliance review')
+  && reviewSource.includes('one bounded code/workflow-quality review')
+  && reviewSource.includes('confirmed finding')
+  && reviewRouterSource.includes('internal-only')
+  && reviewRouterSource.includes('global task'), {
+    context: 'references/context-orchestration.md',
+    review: 'references/review.md',
+    router: 'references/review-router.md',
+  })
 const failed = checks.filter((item) => item.status === 'failed').length
 const report = { root, generatedAt: new Date().toISOString(), summary: { status: failed ? 'failed' : 'passed', passed: checks.length - failed, failed, total: checks.length }, workflows: { contextOrchestrator: failed ? 'incomplete' : 'verified' }, checks, limits: ['Fixture routing does not create a host task or prove real subagent execution.'] }
+fs.rmSync(fixture, { recursive: true, force: true })
 if (jsonOnly) console.log(JSON.stringify(report, null, 2)); else console.log(`# Context Orchestrator Audit\n\nStatus: ${report.summary.status}\nChecks: ${report.summary.passed}/${report.summary.total}`)
 if (failed) process.exit(1)

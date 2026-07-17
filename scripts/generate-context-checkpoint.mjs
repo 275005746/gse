@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { CONTEXT_BUDGETS, inspectRollout, resolveRollout, unavailableReport } from './context-health.mjs'
+import { CONTEXT_BUDGETS, inspectRollout, internalTaskRouting, resolveRollout, unavailableReport } from './context-health.mjs'
 
 const args = process.argv.slice(2)
 const readArg = (name, fallback = null) => { const index = args.indexOf(name); return index === -1 ? fallback : args[index + 1] ?? fallback }
@@ -72,7 +72,7 @@ const lines = [
   '## Result Capsule Contract', '',
   'Return status, concise summary, files inspected/changed, verification, evidence, residual risks, and one next action.', '',
   '## Resume', '',
-  health.rolloverRequired ? 'Open a fresh task with this checkpoint and continue only the recorded next action.' : 'Continue the smallest current atomic step; checkpoint again before expanding scope.',
+  health.rolloverRequired ? 'Resume in a fresh execution context within the same top-level plan unit; continue only the recorded next action and do not persist rollover as a global task.' : 'Continue the smallest current atomic step within the same top-level plan unit; checkpoint again before expanding scope.',
   ...excerpts,
 ]
 let markdown = lines.join('\n').trim() + '\n'
@@ -91,7 +91,8 @@ const report = {
   markdownPreview: markdown.slice(0, 600),
   ...(includeContent ? { markdown } : {}),
   resultCapsule: { maxEstimatedTokens: CONTEXT_BUDGETS.maxAgentResultTokens, requiredFields: ['status', 'summary', 'filesInspected', 'filesChanged', 'verification', 'evidence', 'residualRisks', 'nextAction'] },
-  claimBoundary: 'Checkpoint generation does not create a host task or prove subagent dispatch.',
+  taskRouting: internalTaskRouting(health.rolloverRequired ? 'context-rollover' : 'continue-current-slice'),
+  claimBoundary: 'Checkpoint generation continues the same top-level plan unit; it does not create a host task, persist rollover as a global task, or prove subagent dispatch.',
 }
 if (jsonOnly) console.log(JSON.stringify(report, null, 2)); else console.log(markdown)
 if (!report.budget.withinBudget) process.exit(1)

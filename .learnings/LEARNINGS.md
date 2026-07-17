@@ -53,3 +53,68 @@ When adding README gates, check for the minimum public-facing clarity needed by 
 - Last-Seen: 2026-07-07
 
 ---
+
+## [LRN-20260717-001] correction
+
+**Logged**: 2026-07-17T09:47:15Z
+**Priority**: high
+**Status**: promoted
+**Area**: tests
+
+### Summary
+Use focused verification while implementing and reserve broad validation profiles for stage completion.
+
+### Details
+After a two-line task-routing repair, the full Lite validation profile was run repeatedly. That profile executes 21 audit commands, which distracted from functional delivery and made internal verification appear as uncontrolled task creation. The correct workflow is to finish the functional plan unit first, using syntax checks and only the directly affected audit fixtures during development.
+
+### Suggested Action
+Run the smallest audit that proves the changed behavior. Run Lite once when closing a top-level stage, or earlier only when focused evidence indicates a broader regression risk. Keep reviews, probes, retries, and evidence collection internal rather than representing them as global tasks.
+
+### Metadata
+- Source: user_feedback
+- Related Files: scripts/run-validation-profile.mjs, scripts/audit-context-orchestrator.mjs
+- Tags: validation, task-granularity, function-first, gse
+- Pattern-Key: workflow.function_first_focused_validation
+- Recurrence-Count: 1
+- First-Seen: 2026-07-17
+- Last-Seen: 2026-07-17
+- Promoted: C:\Users\Admin\.claude\CLAUDE.md
+
+### Resolution
+- **Resolved**: 2026-07-17T09:47:15Z
+- **Notes**: Added global rules requiring focused verification during implementation and mandatory self-improvement logging for reusable errors and user corrections.
+
+---
+
+## [LRN-20260717-002] correction
+
+**Logged**: 2026-07-17T11:05:00Z
+**Priority**: high
+**Status**: promoted
+**Area**: config
+
+### Summary
+Task-count limits must apply to review-skill and subagent fan-out, not only GSE tasks and validation commands.
+
+### Details
+A high-effort code-review skill launched several finder Agents, and one general-purpose Agent expanded into roughly 85 internal tasks. Although GSE top-level task routing and validation profiles had already been bounded, invoking an unbounded review workflow recreated the same task-explosion experience and violated the user's five-concurrent-task limit.
+
+### Suggested Action
+When the user limits task or subagent counts, treat that limit as a total execution budget across skills, Agents, workflows, and nested work. Do not invoke review modes that prescribe fan-out; perform a bounded inline review unless the user explicitly authorizes orchestration.
+
+### Metadata
+- Source: user_feedback
+- Related Files: C:\Users\Admin\.claude\CLAUDE.md
+- Tags: agents, code-review, concurrency, task-granularity
+- Pattern-Key: workflow.task_limit_includes_nested_fanout
+- Recurrence-Count: 1
+- First-Seen: 2026-07-17
+- Last-Seen: 2026-07-17
+- Promoted: C:\Users\Admin\.claude\CLAUDE.md
+- See Also: LRN-20260717-001
+
+### Resolution
+- **Resolved**: 2026-07-17T11:05:00Z
+- **Notes**: Stopped the fan-out review path and switched the remaining review to a single inline execution stream without Agents, workflows, or task creation.
+
+---

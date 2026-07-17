@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gse.local/schemas/core/v1/active-change.schema.json",
+  "title": "GSE Core Active Change v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "changeId",
+    "stateRevision",
+    "profile",
+    "lifecycleStage",
+    "lifecycleState",
+    "sourceDigests",
+    "derivedFrom",
+    "conflicts"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "changeId": { "type": "string", "minLength": 1 },
+    "stateRevision": { "type": "integer", "minimum": 0 },
+    "profile": { "enum": ["lite", "standard", "enterprise"] },
+    "lifecycleStage": { "enum": ["frame", "specify", "build", "verify", "close"] },
+    "lifecycleState": {
+      "enum": [
+        "draft",
+        "framed",
+        "specified",
+        "building",
+        "verifying",
+        "verified",
+        "closed",
+        "needs_decision",
+        "blocked",
+        "failed",
+        "superseded",
+        "cancelled"
+      ]
+    },
+    "sourceDigests": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      }
+    },
+    "derivedFrom": { "type": "array", "items": { "type": "string" } },
+    "conflicts": { "type": "array" }
+  }
+}

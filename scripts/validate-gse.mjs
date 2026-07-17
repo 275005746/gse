@@ -268,6 +268,23 @@ function compactAuditFixtures(runResult) {
 
 const checks = []
 
+for (const [id, label, script] of [
+  ['validate-core-01', 'Core contract audit', 'audit-core-contracts.mjs'],
+  ['validate-core-02', 'Core compatibility audit', 'audit-core-compatibility.mjs'],
+  ['validate-core-03', 'Core transaction audit', 'audit-core-transactions.mjs'],
+]) {
+  const audit = run(process.execPath, [path.join(root, 'scripts', script), '--root', root, '--json'])
+  const data = parseJson(audit.stdout)
+  checks.push({
+    id,
+    label,
+    status: audit.status === 0 && data?.summary?.failed === 0 ? 'passed' : 'failed',
+    command: audit.command,
+    summary: data?.summary ?? null,
+    stderr: audit.stderr,
+  })
+}
+
 const auditGse = run(process.execPath, [path.join(root, 'scripts', 'audit-gse.mjs'), '--root', root, '--json'])
 checks.push({
   id: 'validate-01',

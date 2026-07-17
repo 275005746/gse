@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import { mapLegacyStage } from './core/lifecycle.mjs'
 
 const args = process.argv.slice(2)
 
@@ -157,6 +158,7 @@ if (stateStage === 'intake' && !implementationEvidence) {
 }
 
 const nextStage = stages[Math.min(stages.indexOf(currentStage) + 1, stages.length - 1)]
+const lifecycle = mapLegacyStage(currentStage)
 const routes = {
   intake: ['stage-orchestrator.md', 'project-bootstrap.md', 'project-profile.md'],
   opportunity: ['stage-orchestrator.md', 'goal-map.md', 'spec-workflow.md'],
@@ -199,6 +201,8 @@ const report = {
   target,
   intent,
   current_stage: currentStage,
+  lifecycle_stage: lifecycle.stage,
+  lifecycle_concern: lifecycle.concern,
   stage_basis: stageBasis.length ? stageBasis : ['repository contains no corroborating lifecycle evidence'],
   missing_artifacts: missingArtifacts,
   required_references: routes[currentStage],

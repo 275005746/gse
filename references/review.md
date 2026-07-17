@@ -130,6 +130,12 @@ When using real subagents or sequential role simulation:
 
 Do not start code-quality approval before unresolved spec compliance issues are addressed.
 
+## Bounded Review Cycle
+
+A normal top-level implementation unit receives one bounded specification-compliance review and one bounded code/workflow-quality review. These reviews, along with QA/evidence checks, are `internal-only` execution actions inside the owning plan unit; they are not separate global tasks.
+
+Re-review only the affected scope after a confirmed finding has been repaired. Suggestions, unconfirmed concerns, reads, probes, tests, retries, fix attempts, and evidence collection must not create review loops or global tasks. Additional risk-specific axes may still be selected, but they remain bounded internal actions. Separate reviewers are optional when independent judgment is unnecessary; sequential role execution is valid when its evidence boundary is stated honestly.
+
 ## Project Integration
 
 - `references/agent-roles.md` defines Reviewer and QA responsibilities.

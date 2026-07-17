@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "stateRevision": 0,
+  "projectName": "Legacy Standard Project",
+  "mode": "standard",
+  "phase": "Specify the add-user-login change with acceptance and security constraints.",
+  "currentSummary": "add-user-login",
+  "currentSlice": {
+    "activeChangeId": "add-user-login"
+  },
+  "activeChangeId": null,
+  "updatedAt": "2026-07-16T00:00:00.000Z"
+}
