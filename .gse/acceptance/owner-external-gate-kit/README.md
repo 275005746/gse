@@ -1,6 +1,6 @@
 # GSE Owner / External Gate Kit
 
-Generated: 2026-07-09T04:45:24.927Z
+Generated: 2026-07-17T14:08:20.946Z
 Root: <gse-root>
 
 ## Purpose
@@ -9,12 +9,15 @@ This kit is the one-directory execution packet for the remaining owner-required 
 
 ## Current Boundary
 
-- Public accepted: verified
-- Pending gates: 0
+- Public accepted: not-accepted
+- Pending gates: 3
 - Source of truth: `scripts/audit-public-acceptance-readiness.mjs` and `references/final-readiness.md`
 
 ## Execution Order
 
+- `05-public-registry-publication`: Public registry publication (external registry)
+- `06-marketplace-approval`: Marketplace approval (external marketplace)
+- `08-other-host-runtime-invocation`: Other host runtime invocation (host runtime)
 
 ## Files
 

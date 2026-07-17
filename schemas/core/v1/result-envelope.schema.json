@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gse.local/schemas/core/v1/result-envelope.schema.json",
+  "title": "GSE Core Result Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operationId",
+    "status",
+    "stage",
+    "reasonCode",
+    "message",
+    "changeId",
+    "taskId",
+    "stateRevision",
+    "requiredActions",
+    "artifactRefs",
+    "evidenceRefs",
+    "diagnostics",
+    "safeToRetry"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "operationId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["proceed", "repair", "ask_user", "blocked", "complete"] },
+    "stage": { "type": ["string", "null"], "enum": ["frame", "specify", "build", "verify", "close", null] },
+    "reasonCode": { "type": "string", "minLength": 1 },
+    "message": { "type": "string" },
+    "changeId": { "type": ["string", "null"] },
+    "taskId": { "type": ["string", "null"] },
+    "stateRevision": { "type": ["integer", "null"], "minimum": 0 },
+    "requiredActions": { "type": "array", "items": { "type": "string" } },
+    "artifactRefs": { "type": "array", "items": { "type": "string" } },
+    "evidenceRefs": { "type": "array", "items": { "type": "string" } },
+    "diagnostics": { "type": "array", "items": { "type": "object" } },
+    "safeToRetry": { "type": "boolean" }
+  }
+}

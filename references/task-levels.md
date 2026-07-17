@@ -60,6 +60,15 @@ Gate profile:
 - Use full validation only for release, public contract, scaffold/skill, install, cross-host, or high-blast-radius changes.
 - Keep evidence concise even when gates are heavy; link or summarize outputs instead of pasting logs.
 
+## Core Profile Compatibility v1
+
+- Level 1 and `lite` map to Lite.
+- Level 2 and `standard` map to Standard.
+- Level 3 and `enterprise` map to Enterprise.
+- `assets/policies/profile-triggers.v1.json` is the machine-readable decision table.
+- A user may raise rigor. A lower preference is ignored when a contributing trigger is hard or non-downgradeable.
+- Unknown status for a possible hard-risk input returns `ask_user`; it never silently selects Lite or Standard.
+
 ## Upgrade Triggers
 
 Upgrade one level when:

@@ -59,6 +59,9 @@ function run(script, commandArgs) {
 
 function commandList(selectedProfile) {
   const common = [
+    ['audit-core-contracts.mjs', ['--root', root, '--json']],
+    ['audit-core-compatibility.mjs', ['--root', root, '--json']],
+    ['audit-core-transactions.mjs', ['--root', root, '--json']],
     ['audit-agent-entrypoint.mjs', ['--root', root, '--json']],
         ['audit-project-capability-registry.mjs', ['--root', root, '--target', target, '--json']],
     ['audit-commands.mjs', ['--root', root, '--json']],
@@ -77,6 +80,7 @@ function commandList(selectedProfile) {
     ['audit-tool-fallback-policy.mjs', ['--root', root, '--target', target, '--json']],
     ['audit-stage-orchestrator.mjs', ['--root', root, '--json']],
     ['audit-goal-discovery.mjs', ['--root', root, '--json']],
+    ['audit-context-orchestrator.mjs', ['--root', root, '--json']],
                 ['audit-session-sync.mjs', ['--root', root, '--json']],
         ['audit-learning-system.mjs', ['--root', root, '--json']],
   ]

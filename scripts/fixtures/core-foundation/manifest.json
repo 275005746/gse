@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "legacy-lite",
+      "expectedStatus": "proceed",
+      "expectedRevision": 0,
+      "assertSourceBytesUnchanged": true
+    },
+    {
+      "id": "legacy-standard-change",
+      "expectedStatus": "proceed",
+      "expectedStage": "specify",
+      "expectedRevision": 0,
+      "assertSourceBytesUnchanged": true
+    },
+    {
+      "id": "enterprise-hard-risk",
+      "expectedStatus": "proceed",
+      "expectedProfile": "enterprise",
+      "expectedTriggerIds": [
+        "RISK_AUTH_TRUST"
+      ]
+    },
+    {
+      "id": "stale-evidence",
+      "expectedStatus": "blocked",
+      "expectedReasonCode": "EVIDENCE_INPUT_DIGEST_MISMATCH"
+    },
+    {
+      "id": "contradictory-close",
+      "expectedStatus": "blocked",
+      "expectedReasonCode": "STATE_ARTIFACT_CONTRADICTION"
+    },
+    {
+      "id": "transaction-faults",
+      "faultSteps": [
+        "after-lock",
+        "after-manifest",
+        "after-intent",
+        "after-stage",
+        "after-publish",
+        "after-commit-marker"
+      ]
+    },
+    {
+      "id": "truncated-jsonl",
+      "expectedCommittedRecords": 1,
+      "expectedQuarantinedTailLines": 1
+    }
+  ]
+}

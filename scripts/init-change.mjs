@@ -3,6 +3,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { executeTransaction } from './core/persistence/transaction.mjs'
+import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+
 const args = process.argv.slice(2)
 
 function readArg(name, fallback = null) {
@@ -220,7 +223,7 @@ Change ID: ${changeId}
 `
 }
 
-function initChange(target) {
+async function initChange(target) {
   const resolvedTarget = path.resolve(target)
   const changeId = slug(changeIdArg)
   const changeDir = path.join(resolvedTarget, '.gse', 'changes', changeId)
@@ -233,10 +236,32 @@ function initChange(target) {
     ['review.md', renderReview(changeId)],
     ['execution-quality-pack.md', renderExecutionPack(changeId)],
   ]
-  const results = files.map(([name, content]) => ({
+  const results = files.map(([name]) => ({
     relativePath: path.join('.gse', 'changes', changeId, name).replace(/\\/g, '/'),
-    status: writeIfMissing(path.join(changeDir, name), content),
+    status: force || !fs.existsSync(path.join(changeDir, name)) ? 'written' : 'skipped',
   }))
+  const writes = files
+    .filter(([name]) => force || !fs.existsSync(path.join(changeDir, name)))
+    .map(([name, content]) => ({
+      kind: 'text-write',
+      path: `.gse/changes/${changeId}/${name}`,
+      content: content.trimStart().replace(/\n/g, '\r\n'),
+    }))
+  const statePath = path.join(resolvedTarget, '.gse', 'state.json')
+  fs.mkdirSync(path.dirname(statePath), { recursive: true })
+  if (!fs.existsSync(statePath)) fs.writeFileSync(statePath, JSON.stringify({ schemaVersion: 1, stateRevision: 0, activeChangeId: null }) + '\n', 'utf8')
+  if (writes.length > 0) {
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
+    const transaction = await executeTransaction({
+      target: resolvedTarget,
+      operationId: `init-change-${changeId}`,
+      expectedRevision: state.stateRevision,
+      writes,
+      events: [],
+      allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
+    })
+    if (transaction.status !== 'complete') throw new Error(transaction.message)
+  }
   const written = results.filter((item) => item.status !== 'skipped').length
   const skipped = results.filter((item) => item.status === 'skipped').length
   return {
@@ -256,7 +281,7 @@ function initChange(target) {
 }
 
 const target = selfTest ? createFixture() : targetArg
-const report = initChange(target)
+const report = await initChange(target)
 
 if (jsonOnly) console.log(JSON.stringify(report, null, 2))
 else {

@@ -12,6 +12,10 @@
 - Run the lightest validation profile that proves the claim.
 - For change/spec behavior, run `node scripts/audit-change-system.mjs --root <skill-root> --json`.
 - For README or command behavior, ensure the relevant audit remains wired into `scripts/validate-gse.mjs`.
+- Before claiming Section 20 foundation behavior, all three commands must pass:
+  - `node scripts/audit-core-contracts.mjs --root <skill-root> --json`
+  - `node scripts/audit-core-compatibility.mjs --root <skill-root> --json`
+  - `node scripts/audit-core-transactions.mjs --root <skill-root> --json`
 - Update `.gse/evidence/YYYY-MM-DD.md` and `.gse/evidence/index.jsonl` when the slice creates new evidence.
 
 ## Target-Project Claims

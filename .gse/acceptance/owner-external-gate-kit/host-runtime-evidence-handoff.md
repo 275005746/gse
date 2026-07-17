@@ -1,6 +1,6 @@
 # GSE Host Runtime Evidence Handoff
 
-Generated: 2026-07-09T04:45:21.727Z
+Generated: 2026-07-17T14:08:19.476Z
 Root: <gse-root>
 
 ## Purpose
@@ -16,11 +16,11 @@ Turn cross-host support into auditable runtime evidence. Generated adapters, doc
 
 ## Current Runtime Evidence
 
-- Host runtime invocation records: 2
-- Verified or accepted records: 2
-- Hosts with records: Codex app background thread, Node.js npm package runtime
+- Host runtime invocation records: 0
+- Verified or accepted records: 0
+- Hosts with records: none
 - Native slash-command records: 0
-- Portable text-command records: 1
+- Portable text-command records: 0
 - Audit command: `node scripts/audit-host-runtime-invocations.mjs --root __GSE_OR_PROJECT__ --json`
 
 ## Host Evidence Plan

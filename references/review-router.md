@@ -23,6 +23,12 @@ Review must answer:
 2. Would the selected evidence fail if the changed behavior broke?
 3. Are claim boundaries honest for unit, component, API, browser, CI, release, and external evidence?
 
+## Task Boundary
+
+Selected review axes run as bounded `internal-only` actions inside the owning top-level plan unit. They do not become a global task merely because the reasoning is independent or a Reviewer/QA role is named.
+
+For a normal implementation unit, route one specification-compliance pass and one code/workflow-quality pass. Route a re-review only after a confirmed finding and completed repair, and limit it to the affected scope. Reads, probes, tests, retries, fix attempts, context rollover, and evidence collection are also internal actions. Only a coherent user-visible top-level plan unit may be globally task eligible.
+
 ## Evidence Boundary
 
 Review output is not a substitute for runtime evidence. A review can approve the evidence story, but it cannot upgrade a claim beyond the strongest executed proof.

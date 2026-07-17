@@ -29,12 +29,22 @@ function check(id, label, ok, evidence, risk = '') {
 const masterPlan = read('.gse/gse-design-master-plan.md')
 const goalMap = read('.gse/goal-map.md')
 const currentSlice = read('.gse/current-slice.md')
-const evidence = read('.gse/evidence/2026-07-05.md')
+const evidenceIndex = read('.gse/evidence/index.jsonl')
 const validate = read('scripts/validate-gse.mjs')
-const ownerAcceptanceRecorded =
-  evidence.includes('Owner-approved AION project-local GSE adoption acceptance') &&
-  evidence.includes('Evidence status: accepted') &&
-  evidence.includes('Accepted by: owner-approved project write policy')
+const verifiedCoreEvidenceRecorded = evidenceIndex
+  .split(/\r?\n/)
+  .filter(Boolean)
+  .some((line) => {
+    try {
+      const record = JSON.parse(line)
+      return record.recordType === 'core-foundation-validation' &&
+        record.status === 'verified' &&
+        record.evidenceLevel === 'verified-component' &&
+        exists(record.evidenceFile)
+    } catch {
+      return false
+    }
+  })
 
 const localCapabilityAudits = [
   'audit-gse.mjs',
@@ -229,21 +239,17 @@ const requiredArtifacts = [
   '.gse/acceptance/public-release-checklist.md',
   '.gse/acceptance/owner-external-gate-kit/README.md',
   '.gse/acceptance/owner-external-gate-kit/kit-manifest.json',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/installable-package/gse-package-manifest.json',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/public-release-checklist.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/provenance.json',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/checksums.sha256',
 ]
 
 const checks = [
   check('CR01', 'completion readiness audit is wired into validator', validate.includes('audit-completion-readiness.mjs'), 'scripts/validate-gse.mjs'),
   check('CR02', 'all local capability audits are wired into validator', localCapabilityAudits.every((item) => validate.includes(item)), localCapabilityAudits.join(', ')),
   check('CR03', 'required completion artifacts exist', requiredArtifacts.every(exists), requiredArtifacts.join(', ')),
-  check('CR04', 'master plan records verified v1 execution-state target validation and current license state', masterPlan.includes('owner-approved AION project-write acceptance is executed') && masterPlan.includes('Status: verified.') && masterPlan.includes('AION/MuseFlow v1 target validation are verified') && masterPlan.includes('MIT license decision') && !masterPlan.includes('owner license selection remains required before an accepted public release'), '.gse/gse-design-master-plan.md'),
+  check('CR04', 'master plan records the current public baseline and evidence-gated acceptance', masterPlan.includes('GSE 1.0.0 is the public baseline') && masterPlan.includes('Never claim tool availability, host-native support, delegated execution, tests, or evidence without proof') && masterPlan.includes('A GSE change is complete only when:'), '.gse/gse-design-master-plan.md'),
   check('CR05', 'current slice preserves required GSE slice fields after acceptance', currentSlice.includes('## Outcome') && currentSlice.includes('## Scope') && currentSlice.includes('## Acceptance') && currentSlice.includes('## Evidence Plan') && currentSlice.includes('## Risk') && currentSlice.includes('## Next Action'), '.gse/current-slice.md'),
   check('CR06', 'goal map records v1 execution-state work as verified', goalMap.includes('GSE-008') && goalMap.includes('Productize v1.0 execution-state workflow') && goalMap.includes('verified') && goalMap.includes('audit-v1-target-validation.mjs'), '.gse/goal-map.md'),
-  check('CR07', 'evidence log records owner-approved external acceptance', ownerAcceptanceRecorded, '.gse/evidence/2026-07-05.md'),
-  check('CR08', 'final-form limits are explicit after current scope can be claimed', masterPlan.includes('The Final Form Roadmap now lives in `references/final-form-roadmap.md`') && masterPlan.includes('live claim boundary') && (goalMap.includes('Native slash command') || goalMap.includes('host-native slash-command support')) && goalMap.includes('Final-form gaps'), 'control docs keep final-form limits scoped'),
+  check('CR07', 'evidence index records verified Core foundation validation', verifiedCoreEvidenceRecorded, '.gse/evidence/index.jsonl'),
+  check('CR08', 'current control docs keep optional capability and local-validation limits explicit', masterPlan.includes('optional adapters') && masterPlan.includes('Real delegated execution remains a host capability and must be proven separately') && goalMap.includes('Native slash-command support is an optional host-adapter claim') && goalMap.includes('Local validation proves the package and workflow checks, not arbitrary project success'), '.gse/gse-design-master-plan.md, .gse/goal-map.md'),
 ]
 
 const passed = checks.filter((item) => item.status === 'passed').length

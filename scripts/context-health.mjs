@@ -20,12 +20,23 @@ const maxHealth = (...values) => values.reduce((best, value) => RANK[value] > RA
 const usageHealth = (percent) => percent >= 90 ? 'red' : percent >= 80 ? 'orange' : percent >= 65 ? 'yellow' : 'green'
 const compactionHealth = (count) => count >= 3 ? 'red' : count >= 2 ? 'orange' : count >= 1 ? 'yellow' : 'green'
 
+export function internalTaskRouting(actionKind) {
+  return {
+    workClass: 'execution-action',
+    scope: 'operational',
+    visibility: 'internal',
+    persistence: 'internal-only',
+    globalTaskEligible: false,
+    actionKind,
+  }
+}
+
 function routeFor(health) {
   return {
     green: ['continue-normal', true, 'normal', 'coordinator', false],
     yellow: ['continue-compact', true, 'compact', 'coordinator-or-one-bounded-worker', false],
     orange: ['finish-atom-and-checkpoint', false, 'capsule-only', 'coordinator-finish-current-atom', true],
-    red: ['block-expansion-and-rollover', false, 'handoff-only', 'new-task-required', true],
+    red: ['block-expansion-and-rollover', false, 'handoff-only', 'fresh-context-same-plan-unit', true],
     unavailable: ['continue-portable-policy', true, 'compact-preferred', 'coordinator-without-host-usage-evidence', false],
   }[health]
 }
@@ -45,6 +56,7 @@ export function classifyContextHealth({ usedTokens = null, contextWindow = null,
     agentRoute,
     checkpointRequired: rolloverRequired,
     rolloverRequired,
+    taskRouting: internalTaskRouting(rolloverRequired ? 'context-rollover' : 'continue-current-slice'),
   }
 }
 

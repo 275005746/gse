@@ -14,6 +14,8 @@ Portable execution helper:
 
 ```text
 node <gse-skill>/scripts/gse.mjs continue --target <project-root>
+node <gse-skill>/scripts/gse.mjs frame --target <project-root> --json
+node <gse-skill>/scripts/gse.mjs build --target <project-root> --json
 node <gse-skill>/scripts/run-gse-command.mjs --target <project-root> --command "/gse continue --brief"
 node <gse-skill>/scripts/run-gse-command.mjs --target <project-root> --command "/gse continue --doctor"
 node <gse-skill>/scripts/run-gse-command.mjs --target <project-root> --command "/gse stage continue the existing project"
@@ -45,11 +47,24 @@ node <gse-skill>/scripts/audit-command-execution.mjs --root <gse-skill> --profil
 
 The Claude adapter writes `.claude/commands/gse.md`, matching Claude Code's documented project command shape. The Codex adapter writes a pointer file because project-level native `/gse` command files are not verified for Codex in this package. Hermes, WorkBuddy, Copilot, Gemini, and generic adapters write portable pointer files only; they do not prove host runtime invocation.
 
+The five-stage verbs are a compatibility facade. Existing detailed stages remain available through `/gse stage`, and existing commands remain supported. `/gse close` proves verifiable delivery readiness; `/gse release`, `/gse package`, and `/gse public-release` remain separately authorized post-Close flows.
+
+Read-only GSE 1.0 migration inspection:
+
+```text
+GSE_SKILL_ROOT=/absolute/path/to/gse
+PROJECT_ROOT=/absolute/path/to/project
+node "$GSE_SKILL_ROOT/scripts/inspect-gse-v1-migration.mjs" --target "$PROJECT_ROOT" --json
+```
+
 ## Command Map
 
 | Command | Purpose | Primary Route | Required Inputs | Typical Verification |
 |---|---|---|---|---|
 | `/gse help` | Show available GSE commands and the current project entry files | Command help | `SKILL.md`, `references/commands.md` | none or file inspection |
+| `/gse frame [intent]` | Frame the current project through discovery and the first unmet gate | Five-stage compatibility facade | current request, project rules, repository artifacts, optional `.gse` state | current-stage detection output |
+| `/gse specify [change-id]` | Preview the native Change pack by default; write only with runner-level `--execute` | Five-stage compatibility facade | change id, level, project state | Change preview or created pack inspection |
+| `/gse build` | Generate the continuation packet for the accepted active Change without executing implementation commands | Five-stage compatibility facade | active Change, project state, evidence index | continuation packet inspection |
 | `/gse init` | Initialize `.gse/` in a new project | Project bootstrap | project rules, `project-bootstrap.md` | scaffold file check |
 | `/gse adopt` | Adopt GSE in an existing project without overwriting local rules | Project adoption | project rules, `adoption-recipes.md`, `project-profile.md` | discovery or adoption smoke |
 | `/gse continue` | Continue the current project through a hard preflight and compact state packet; use `--brief` for normal takeover and `--doctor`/`--full` for deep diagnostics | Execute workflow | project rules, `.gse/state.json`, evidence index, `.gse/project-profile.md`, canonical product goal source, `.gse/goal-map.md` execution projection, quality gates | continue preflight plus focused test/smoke for the slice |
@@ -77,6 +92,9 @@ The Claude adapter writes `.claude/commands/gse.md`, matching Claude Code's docu
 ## Aliases
 
 - `gse help` -> `/gse help`
+- `gse frame` -> `/gse frame`
+- `gse specify` -> `/gse specify`
+- `gse build` -> `/gse build`
 - `gse init` -> `/gse init`
 - `gse adopt` -> `/gse adopt`
 - `gse continue` -> `/gse continue`

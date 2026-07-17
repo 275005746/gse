@@ -1,6 +1,6 @@
 {
   "name": "@t275005746/gse",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Goal-Spec-Evidence Engineering workflow skill for long-running agent-assisted software projects.",
   "type": "module",
   "license": "MIT",
@@ -36,6 +36,7 @@
     "assets",
     "examples",
     "references",
+    "schemas",
     "scripts"
   ],
   "scripts": {
@@ -56,7 +57,10 @@
     "audit:stage": "node scripts/audit-stage-orchestrator.mjs --root . --json",
     "audit:entrypoint": "node scripts/audit-agent-entrypoint.mjs --root . --json",
     "audit:context": "node scripts/audit-context-orchestrator.mjs --root . --json",
-    "audit:capabilities": "node scripts/audit-project-capability-registry.mjs --root . --target . --json"
+    "audit:capabilities": "node scripts/audit-project-capability-registry.mjs --root . --target . --json",
+    "audit:core": "node scripts/audit-core-contracts.mjs --root . --json",
+    "audit:compatibility": "node scripts/audit-core-compatibility.mjs --root . --json",
+    "audit:transactions": "node scripts/audit-core-transactions.mjs --root . --json"
   },
   "keywords": [
     "gse",

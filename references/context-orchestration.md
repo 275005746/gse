@@ -9,7 +9,7 @@ Use this when a long GSE session, repeated compaction, large tool output, or del
 | green | usage below 65% and no compaction | normal, still summarize large logs | main agent |
 | yellow | usage 65-80% or one compaction | compact output and bounded context packs | main agent or one focused worker |
 | orange | usage 80-90% or two compactions | finish current atom, write checkpoint, stop expansion | rollover after current atom |
-| red | usage at least 90% or three compactions | block expansion and generate handoff | new task required |
+| red | usage at least 90% or three compactions | block expansion and generate handoff | fresh execution context for the same top-level plan unit |
 
 Compaction count can raise health severity even when the latest post-compaction token sample is small. A host exhaustion sentinel is red.
 
@@ -38,6 +38,9 @@ These budgets protect coordinator headroom. They do not claim lower total token 
 - Use Verifier and Reviewer as read-only roles unless evidence files are explicitly assigned.
 - Parallel writers require isolated worktrees or proven non-overlapping files.
 - At orange or red, do not start another worker; checkpoint first.
+- Context rollover continues the same top-level plan unit in a fresh execution context. It is an `internal-only` execution action and must not create a new global task.
+- Reads, searches, probes, tests, reviews, retries, fixes, and evidence collection remain internal execution actions within their owning plan unit.
+- Only a coherent, user-visible top-level plan unit may be marked `global-task-eligible`; routing metadata declares eligibility but does not create or persist a host task.
 
 ## Context Pack
 ## Tool Output Policy

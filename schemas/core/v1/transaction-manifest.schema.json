@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gse.local/schemas/core/v1/transaction-manifest.schema.json",
+  "title": "GSE Core Transaction Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "transactionId",
+    "operationId",
+    "createdAt",
+    "expectedRevision",
+    "nextRevision",
+    "status",
+    "writes",
+    "eventIds"
+  ],
+  "$defs": {
+    "digestOrNull": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$))(?!\\.?$).+$"
+    },
+    "write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "beforeDigest", "afterDigest", "stagedPath"],
+      "properties": {
+        "kind": { "enum": ["json-replace", "jsonl-append", "text-write", "tree-move"] },
+        "path": { "$ref": "#/$defs/safeRelativePath" },
+        "beforeDigest": { "$ref": "#/$defs/digestOrNull" },
+        "afterDigest": { "$ref": "#/$defs/digestOrNull" },
+        "stagedPath": { "$ref": "#/$defs/safeRelativePath" },
+        "eventId": { "type": "string", "minLength": 1 },
+        "beforeSize": { "type": "integer", "minimum": 0 },
+        "beforeImagePath": { "$ref": "#/$defs/safeRelativePath" },
+        "sourcePath": { "$ref": "#/$defs/safeRelativePath" },
+        "targetPath": { "$ref": "#/$defs/safeRelativePath" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "jsonl-append" } }, "required": ["kind"] },
+          "then": { "required": ["eventId", "beforeSize"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "tree-move" } }, "required": ["kind"] },
+          "then": { "required": ["sourcePath", "targetPath"] }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "transactionId": { "type": "string", "minLength": 1 },
+    "operationId": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "expectedRevision": { "type": "integer", "minimum": 0 },
+    "nextRevision": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["prepared", "staged", "published", "committed", "rolled-back", "recovered"] },
+    "writes": { "type": "array", "items": { "$ref": "#/$defs/write" } },
+    "eventIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+  }
+}

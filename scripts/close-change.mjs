@@ -1,116 +1,234 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const args = process.argv.slice(2)
+import { createResultEnvelope } from './core/contracts.mjs'
+import { currentEvidenceBasis } from './core/evidence-basis.mjs'
+import { evaluateCloseConsistency } from './core/evidence.mjs'
+import { readAtomicJson } from './core/persistence/atomic-json.mjs'
+import { readCommittedJsonl } from './core/persistence/jsonl.mjs'
+import { inspectPendingTransactions } from './core/persistence/recovery.mjs'
+import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+import { executeTransaction } from './core/persistence/transaction.mjs'
 
-function readArg(name, fallback = null) {
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+const SAFE_DATE = /^\d{4}-\d{2}-\d{2}$/
+const VALID_STATUS = new Set(['result', 'verified', 'accepted'])
+const REQUIRED_FILES = ['brief.md', 'spec.md', 'tasks.md', 'evidence.md', 'review.md']
+
+function readArg(args, name, fallback = null) {
   const index = args.indexOf(name)
-  if (index === -1) return fallback
-  return args[index + 1] ?? fallback
+  return index === -1 ? fallback : args[index + 1] ?? fallback
 }
 
-const target = path.resolve(readArg('--target', process.cwd()))
-const changeId = String(readArg('--change-id', '')).trim().toLowerCase()
-const status = readArg('--status', 'verified')
-const date = readArg('--date', new Date().toISOString().slice(0, 10))
-const dryRun = args.includes('--dry-run')
-const force = args.includes('--force')
-const jsonOnly = args.includes('--json')
-
-const validStatus = new Set(['result', 'verified', 'accepted'])
-if (!changeId) {
-  console.error('Missing --change-id.')
-  process.exit(1)
-}
-if (!validStatus.has(status)) {
-  console.error('Invalid --status value. Expected result, verified, or accepted.')
-  process.exit(1)
-}
-
-const changeDir = path.join(target, '.gse', 'changes', changeId)
-const archiveDir = path.join(target, '.gse', 'archive', `${date}-${changeId}`)
-const evidenceIndex = path.join(target, '.gse', 'evidence', 'index.jsonl')
-const requiredFiles = [
-  'brief.md',
-  'spec.md',
-  'tasks.md',
-  'evidence.md',
-  'review.md',
-]
-
-function read(relativePath) {
-  const fullPath = path.join(changeDir, relativePath)
-  return fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : ''
+function failure(operationId, reasonCode, message, { changeId = null, stateRevision = null, requiredActions = [], diagnostics = [] } = {}) {
+  return createResultEnvelope({
+    operationId,
+    status: 'blocked',
+    stage: 'close',
+    reasonCode,
+    message,
+    changeId,
+    taskId: null,
+    stateRevision,
+    requiredActions,
+    artifactRefs: [],
+    evidenceRefs: [],
+    diagnostics: diagnostics.length ? diagnostics : [{ code: reasonCode }],
+    safeToRetry: true,
+  })
 }
 
-function fail(message, extra = {}) {
-  const report = { target, changeId, status: 'failed', message, ...extra }
-  console.error(JSON.stringify(report, null, 2))
-  process.exit(1)
+export async function closeChange({ target, changeId, status = 'verified', date = new Date().toISOString().slice(0, 10), dryRun = false, force = false, currentDependencies } = {}) {
+  const resolvedTarget = path.resolve(target ?? process.cwd())
+  const operationId = `close-change-${date}-${changeId}`
+  if (!SAFE_ID.test(changeId ?? '')) return failure(operationId, 'INVALID_CHANGE_ID', 'A safe --change-id is required.', { changeId })
+  if (!VALID_STATUS.has(status)) return failure(operationId, 'INVALID_CLOSE_STATUS', 'Close status must be result, verified, or accepted.', { changeId })
+  if (!SAFE_DATE.test(date)) return failure(operationId, 'INVALID_CLOSE_DATE', 'Close date must use YYYY-MM-DD.', { changeId })
+
+  const changePath = `.gse/changes/${changeId}`
+  const archivePath = `.gse/archive/${date}-${changeId}`
+  const transactionId = `tx-${operationId}`
+  const committedMarker = readAtomicJson(resolvedTarget, `.gse/transactions/${transactionId}/commit.json`, { allowMissing: true })
+  if (committedMarker?.status === 'committed' && committedMarker.operationId === operationId && committedMarker.transactionId === transactionId) {
+    return createResultEnvelope({
+      operationId,
+      status: 'complete',
+      stage: 'close',
+      reasonCode: 'TRANSACTION_ALREADY_COMMITTED',
+      message: 'Change Close was already committed.',
+      changeId,
+      taskId: null,
+      stateRevision: committedMarker.stateRevision,
+      requiredActions: [],
+      artifactRefs: [archivePath, `.gse/transactions/${transactionId}/commit.json`],
+      evidenceRefs: [],
+      diagnostics: [],
+      safeToRetry: true,
+    })
+  }
+  const changeDirectory = path.join(resolvedTarget, ...changePath.split('/'))
+  const archiveDirectory = path.join(resolvedTarget, ...archivePath.split('/'))
+  if (!fs.existsSync(changeDirectory)) return failure(operationId, 'CHANGE_NOT_FOUND', 'Change directory does not exist.', { changeId })
+  if (fs.existsSync(archiveDirectory)) return failure(operationId, 'ARCHIVE_EXISTS', 'Archive directory already exists and Core v1 cannot replace it safely.', { changeId })
+  const missing = REQUIRED_FILES.filter((name) => !fs.existsSync(path.join(changeDirectory, name)))
+  if (missing.length > 0) return failure(operationId, 'CHANGE_FILES_MISSING', 'Required Change files are missing.', { changeId, requiredActions: missing.map((name) => `Restore ${changePath}/${name}.`) })
+
+  let projectState
+  let activeChange
+  let evidence
+  try {
+    projectState = readAtomicJson(resolvedTarget, '.gse/state.json')
+    activeChange = readAtomicJson(resolvedTarget, `${changePath}/change.json`)
+    evidence = readCommittedJsonl(resolvedTarget, '.gse/evidence/index.jsonl', { allowMissing: true })
+  } catch (error) {
+    return failure(operationId, error.code ?? 'CLOSE_INPUT_UNAVAILABLE', 'Close inputs could not be read safely.', { changeId, diagnostics: [{ code: error.code ?? 'CLOSE_INPUT_UNAVAILABLE' }] })
+  }
+  if (evidence.corruptTail.length > 0) return failure(operationId, 'EVIDENCE_INDEX_CORRUPT', 'The evidence index has a malformed or incomplete tail.', { changeId, stateRevision: projectState?.stateRevision })
+  const pending = inspectPendingTransactions(resolvedTarget)
+  const pendingTransactions = [
+    ...(pending.transactions ?? []),
+    ...(pending.diagnostics ?? []).map((diagnostic) => ({ status: 'blocked', diagnostic })),
+  ]
+  const consistency = evaluateCloseConsistency(resolvedTarget, {
+    projectState,
+    activeChange,
+    evidenceRecords: evidence.records,
+    currentDependencies: currentDependencies ?? currentEvidenceBasis(resolvedTarget, { projectState, activeChange, evidenceRecords: evidence.records }),
+    pendingTransactions,
+    requestedStatus: status,
+  })
+  if (consistency.status !== 'complete') return { ...consistency, operationId }
+
+  if (dryRun) {
+    return createResultEnvelope({
+      operationId,
+      status: 'complete',
+      stage: 'close',
+      reasonCode: 'CLOSE_DRY_RUN_READY',
+      message: 'Close consistency passed; dry-run made no changes.',
+      changeId,
+      taskId: null,
+      stateRevision: projectState.stateRevision,
+      requiredActions: [],
+      artifactRefs: [archivePath],
+      evidenceRefs: consistency.evidenceRefs,
+      diagnostics: [],
+      safeToRetry: true,
+    })
+  }
+
+  const timestamp = new Date().toISOString()
+  const archiveRecord = `# Change Archive Record\n\nChange ID: ${changeId}\nClosed At: ${timestamp}\nStatus: ${status}\nSource: ${changePath}\nArchive: ${archivePath}\n\n## Closure Rules\n\n- Shared revision-aware Close consistency passed.\n- Required Change files were present.\n- Committed current evidence remained authoritative.\n- Source Change folder was moved transactionally.\n`
+  const archiveEventId = `change-archive-${date}-${changeId}`
+  const authorizingEvidence = evidence.records.find((record) => consistency.evidenceRefs.includes(record.eventId ?? record.evidenceId ?? record.recordId ?? record.operationId))
+  const archiveEvent = {
+    schemaVersion: 1,
+    eventId: archiveEventId,
+    date,
+    timestamp,
+    recordType: 'change-archive',
+    changeId,
+    taskId: null,
+    stateRevision: projectState.stateRevision + 1,
+    status,
+    evidenceLevel: status === 'accepted' ? 'accepted-owner' : status === 'verified' ? 'verified-unit' : 'result',
+    requiredEvidenceLevel: status === 'accepted' ? 'accepted-owner' : status === 'verified' ? 'verified-unit' : 'result',
+    summary: `Archived GSE Change ${changeId}.`,
+    claim: `Change ${changeId} passed shared Close consistency and was archived.`,
+    evidenceClass: 'close',
+    method: 'transactional close-change',
+    dependencies: authorizingEvidence?.dependencies ?? null,
+    invalidationScope: [],
+    outcome: 'archived',
+    limitations: [],
+    actor: 'gse-close-change',
+    evidenceFile: `${archivePath}/evidence.md`,
+    relatedArtifacts: [archivePath, `${archivePath}/archive-record.md`],
+    archivePath,
+    commands: [],
+    nextAction: 'Continue from .gse/state.json and the current goal map.',
+  }
+  const transaction = await executeTransaction({
+    target: resolvedTarget,
+    operationId,
+    transactionId,
+    expectedRevision: projectState.stateRevision,
+    writes: [
+      { kind: 'tree-move', sourcePath: changePath, targetPath: archivePath },
+      { kind: 'text-write', path: `${archivePath}/archive-record.md`, content: archiveRecord.replace(/\n/g, '\r\n') },
+      { kind: 'json-replace', path: '.gse/state.json', value: { ...projectState, activeChangeId: null, phase: 'close', currentSlice: projectState.currentSlice ? { ...projectState.currentSlice, status } : projectState.currentSlice } },
+    ],
+    events: [{ path: '.gse/evidence/index.jsonl', event: archiveEvent }],
+    allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
+    validatePreconditions: () => {
+      try {
+        if (!fs.existsSync(changeDirectory)) {
+          return {
+            reasonCode: 'CHANGE_NOT_FOUND',
+            message: 'Change directory no longer exists under the project lock.',
+          }
+        }
+        if (fs.existsSync(archiveDirectory)) {
+          return {
+            reasonCode: 'ARCHIVE_EXISTS',
+            message: 'Archive directory already exists and Core v1 cannot replace it safely.',
+          }
+        }
+        const lockedState = readAtomicJson(resolvedTarget, '.gse/state.json')
+        const lockedChange = readAtomicJson(resolvedTarget, `${changePath}/change.json`)
+        const lockedEvidence = readCommittedJsonl(resolvedTarget, '.gse/evidence/index.jsonl', { allowMissing: true })
+        const lockedPending = inspectPendingTransactions(resolvedTarget)
+        const lockedConsistency = evaluateCloseConsistency(resolvedTarget, {
+          projectState: lockedState,
+          activeChange: lockedChange,
+          evidenceRecords: lockedEvidence.records,
+          currentDependencies: currentEvidenceBasis(resolvedTarget, { projectState: lockedState, activeChange: lockedChange, evidenceRecords: lockedEvidence.records }),
+          pendingTransactions: [
+            ...(lockedPending.transactions ?? []).filter((item) => item.transactionId !== transactionId),
+            ...(lockedPending.diagnostics ?? []).map((diagnostic) => ({ status: 'blocked', diagnostic })),
+          ],
+          requestedStatus: status,
+        })
+        return lockedConsistency.status === 'complete' ? true : lockedConsistency
+      } catch (error) {
+        return { reasonCode: error.code ?? 'CLOSE_PRECONDITION_CHANGED', message: 'Close preconditions could not be revalidated under the project lock.' }
+      }
+    },
+  })
+  if (transaction.status !== 'complete') return failure(operationId, transaction.reasonCode, transaction.message, { changeId, stateRevision: transaction.stateRevision, diagnostics: [{ code: transaction.reasonCode }] })
+
+  return createResultEnvelope({
+    operationId,
+    status: 'complete',
+    stage: 'close',
+    reasonCode: transaction.reasonCode,
+    message: 'Change archived transactionally after Close consistency passed.',
+    changeId,
+    taskId: null,
+    stateRevision: transaction.stateRevision,
+    requiredActions: [],
+    artifactRefs: [archivePath, ...transaction.artifactRefs],
+    evidenceRefs: consistency.evidenceRefs,
+    diagnostics: [],
+    safeToRetry: true,
+  })
 }
 
-if (!fs.existsSync(changeDir)) fail('Change directory does not exist.', { changeDir })
-if (fs.existsSync(archiveDir) && !force) fail('Archive directory already exists. Use --force to overwrite.', { archiveDir })
-
-const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(changeDir, file)))
-if (missing.length) fail('Required change files are missing.', { missing })
-
-const evidence = read('evidence.md')
-const review = read('review.md')
-const hasEvidenceStatus = ['result', 'verified', 'accepted'].some((term) => evidence.toLowerCase().includes(term))
-const hasReviewClosure = review.includes('## Closure')
-if (!hasEvidenceStatus) fail('Evidence file does not include result/verified/accepted status vocabulary.', { file: 'evidence.md' })
-if (!hasReviewClosure) fail('Review file does not include closure section.', { file: 'review.md' })
-
-const archiveRecord = `# Change Archive Record
-
-Change ID: ${changeId}
-Closed At: ${new Date().toISOString()}
-Status: ${status}
-Source: .gse/changes/${changeId}
-Archive: .gse/archive/${date}-${changeId}
-
-## Closure Rules
-
-- Required change files were present.
-- Evidence status vocabulary was present.
-- Review closure section was present.
-- Source change folder was moved to archive.
-`
-
-const indexRecord = {
-  date,
-  recordType: 'change-archive',
-  changeId,
-  status,
-  summary: `Archived GSE change ${changeId}.`,
-  evidenceFile: `.gse/archive/${date}-${changeId}/evidence.md`,
-  archivePath: `.gse/archive/${date}-${changeId}`,
-  commands: [
-    `node scripts/close-change.mjs --target ${target} --change-id ${changeId} --status ${status} --date ${date} --json`,
-  ],
-  nextAction: 'Continue from .gse/state.json and the current goal map.',
+async function main() {
+  const args = process.argv.slice(2)
+  const result = await closeChange({
+    target: readArg(args, '--target', process.cwd()),
+    changeId: String(readArg(args, '--change-id', '')).trim().toLowerCase(),
+    status: readArg(args, '--status', 'verified'),
+    date: readArg(args, '--date', new Date().toISOString().slice(0, 10)),
+    dryRun: args.includes('--dry-run'),
+    force: args.includes('--force'),
+  })
+  console.log(JSON.stringify(result, null, 2))
+  if (result.status !== 'complete') process.exitCode = 1
 }
 
-if (!dryRun) {
-  fs.mkdirSync(path.dirname(archiveDir), { recursive: true })
-  fs.rmSync(archiveDir, { recursive: true, force: true })
-  fs.renameSync(changeDir, archiveDir)
-  fs.writeFileSync(path.join(archiveDir, 'archive-record.md'), archiveRecord.replace(/\n/g, '\r\n'), 'utf8')
-  fs.mkdirSync(path.dirname(evidenceIndex), { recursive: true })
-  fs.appendFileSync(evidenceIndex, JSON.stringify(indexRecord) + '\n', 'utf8')
-}
-
-const report = {
-  target,
-  changeId,
-  status: 'passed',
-  evidenceStatus: status,
-  dryRun,
-  source: changeDir,
-  archive: archiveDir,
-  indexRecord,
-}
-
-console.log(JSON.stringify(report, null, 2))
+const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+if (isCli) await main()

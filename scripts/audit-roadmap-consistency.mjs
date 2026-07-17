@@ -54,6 +54,7 @@ const requiredVerifiedAssets = [
   'scripts/audit-context-orchestrator.mjs',
   'scripts/audit-agent-entrypoint.mjs',
   'scripts/audit-project-capability-registry.mjs',
+  'scripts/audit-final-readiness.mjs',
 ]
 
 const forbiddenPublicHistoryTerms = [
@@ -68,7 +69,7 @@ const requiredPlanTerms = [
   'Context Orchestration',
   'Natural-language goal discovery',
   'Project capability registries',
-  'Native slash-command support is an optional host-adapter claim',
+  'Real delegated execution remains a host capability and must be proven separately',
 ]
 
 const requiredGoalTerms = [
@@ -87,6 +88,7 @@ const checks = [
   check('RC04', 'goal map tracks current 1.0 capability nodes', requiredGoalTerms.every((term) => goalMap.includes(term)), requiredGoalTerms.join(', ')),
   check('RC05', 'public roadmap docs do not require old release history terms', forbiddenPublicHistoryTerms.every((term) => !masterPlan.includes(term) && !goalMap.includes(term)), forbiddenPublicHistoryTerms.join(', ')),
   check('RC06', 'claim boundaries remain explicit', masterPlan.includes('they cannot compact a live host session') && goalMap.includes('Local validation proves the package and workflow checks, not arbitrary project success'), '.gse/gse-design-master-plan.md, .gse/goal-map.md'),
+  check('RC07', 'roadmap audit tracks the live final-readiness boundary', requiredVerifiedAssets.includes('scripts/audit-final-readiness.mjs'), 'scripts/audit-final-readiness.mjs'),
 ]
 
 const passed = checks.filter((item) => item.status === 'passed').length

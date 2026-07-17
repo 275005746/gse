@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gse.local/schemas/core/v1/project-state.schema.json",
+  "title": "GSE Core Project State v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "stateRevision", "activeChangeId"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "stateRevision": { "type": "integer", "minimum": 0 },
+    "activeChangeId": { "type": ["string", "null"] },
+    "projectName": { "type": "string" },
+    "mode": { "type": "string" },
+    "canonicalGoalSource": { "type": ["string", "null"] },
+    "canonicalPlan": { "type": ["string", "null"] },
+    "phase": { "type": ["string", "null"] },
+    "currentSummary": { "type": ["object", "null"] },
+    "currentSlice": { "type": ["object", "null"] },
+    "toolStatuses": { "type": ["object", "null"] },
+    "lastEvidence": { "type": ["string", "null"] },
+    "blockedGates": { "type": "array" },
+    "nextChecks": { "type": "array" },
+    "residualRisks": { "type": "array" },
+    "riskArchive": { "type": "array" }
+  }
+}

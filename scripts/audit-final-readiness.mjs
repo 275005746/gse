@@ -153,6 +153,9 @@ const matrixStatusesHonest = matrix.every((item) => allowedStatuses.has(item.sta
 const verifiedRowsHaveEvidence = matrix.filter((item) => item.status === 'verified').every((item) => item.evidence && item.evidence !== '0')
 const publicAccepted = matrix.every((item) => item.status === 'verified' || item.status === 'not-claimed')
 const ownerAndExternalRowsRemainExplicit = publicAccepted || matrix.some((item) => item.status === 'owner-required' || item.status === 'external-required')
+const ownerAndExternalEvidenceIsHonest = matrix
+  .filter((item) => item.status === 'owner-required' || item.status === 'external-required')
+  .every((item) => item.evidence && !item.evidence.includes('.gse/releases/fixture-'))
 const finalReadinessUsesStatusSourceBoundary = finalReadiness.includes('Status source / baseline') &&
   finalReadiness.includes('current truth is computed by `scripts/audit-final-readiness.mjs`') &&
   finalReadiness.includes('record-driven owner gate') &&
@@ -165,7 +168,7 @@ const checks = [
   check('FR03', 'final readiness audit is wired into validator and completion audits', validate.includes('audit-final-readiness.mjs') && completion.includes('audit-final-readiness.mjs') && roadmap.includes('audit-final-readiness.mjs'), 'validate, completion, roadmap audits'),
   check('FR04', 'readiness matrix uses honest statuses only', matrixStatusesHonest, matrix.map((item) => `${item.area}:${item.status}`).join(', ')),
   check('FR05', 'verified readiness rows have evidence labels', verifiedRowsHaveEvidence, matrix.filter((item) => item.status === 'verified').map((item) => item.area).join(', ')),
-  check('FR06', 'owner and external gates remain explicit until accepted records promote them', ownerAndExternalRowsRemainExplicit && (publicAccepted || goalMap.includes('Final-form gaps')), publicAccepted ? 'all final rows promoted by accepted records' : 'goal map, final readiness matrix'),
+  check('FR06', 'owner and external gates remain explicit until accepted records promote them', ownerAndExternalRowsRemainExplicit && ownerAndExternalEvidenceIsHonest, publicAccepted ? 'all final rows promoted by accepted records' : matrix.filter((item) => item.status === 'owner-required' || item.status === 'external-required').map((item) => `${item.area}:${item.status}`).join(', ')),
   check('FR07', 'install and publish rows include CLI proof boundaries', finalReadiness.includes('installed short CLI status command') && finalReadiness.includes('installed `gse` bin execution') && finalReadiness.includes('CLI bin metadata') && finalReadiness.includes('URL-installed short CLI status command') && distributionAudit.includes('installed short CLI wrapper runs status command') && npmTarballInstallAudit.includes('installed gse bin runs status command') && npmPublishDryRunAudit.includes('publish dry-run preserves CLI package metadata before publication') && remoteDistributionAudit.includes('remote installed short CLI wrapper runs status command'), 'references/final-readiness.md, distribution audits, publish dry-run audit'),
   check('FR08', 'final readiness reference separates baseline from live record-driven status', finalReadinessUsesStatusSourceBoundary, 'references/final-readiness.md, audit-final-readiness.mjs'),
 ]

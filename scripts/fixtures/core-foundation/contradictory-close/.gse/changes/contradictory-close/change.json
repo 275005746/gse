@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "changeId": "contradictory-close",
+  "stateRevision": 0,
+  "profile": "standard",
+  "lifecycleStage": "verify",
+  "lifecycleState": "verified",
+  "sourceDigests": {
+    ".gse/changes/contradictory-close/brief.md": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "derivedFrom": [
+    ".gse/changes/contradictory-close/brief.md"
+  ],
+  "conflicts": [
+    "state.currentSlice does not identify contradictory-close",
+    "lifecycleState verified conflicts with close precondition"
+  ]
+}

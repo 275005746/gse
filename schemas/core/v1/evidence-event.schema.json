@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gse.local/schemas/core/v1/evidence-event.schema.json",
+  "title": "GSE Core Evidence Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "transactionId",
+    "date",
+    "timestamp",
+    "recordType",
+    "changeId",
+    "taskId",
+    "status",
+    "evidenceLevel",
+    "requiredEvidenceLevel",
+    "claim",
+    "evidenceClass",
+    "method",
+    "stateRevision",
+    "dependencies",
+    "invalidationScope",
+    "outcome",
+    "limitations",
+    "actor",
+    "evidenceFile",
+    "relatedArtifacts",
+    "nextAction"
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "pathDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "configurationDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "valueDigest"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "valueDigest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "minLength": 1 },
+    "transactionId": { "type": "string", "minLength": 1 },
+    "date": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "recordType": { "type": "string", "minLength": 1 },
+    "changeId": { "type": ["string", "null"] },
+    "taskId": { "type": ["string", "null"] },
+    "status": { "enum": ["result", "verified", "accepted"] },
+    "evidenceLevel": { "type": "string", "minLength": 1 },
+    "requiredEvidenceLevel": { "type": "string", "minLength": 1 },
+    "claim": { "type": "string", "minLength": 1 },
+    "evidenceClass": { "type": "string", "minLength": 1 },
+    "method": { "type": "string" },
+    "stateRevision": { "type": "integer", "minimum": 0 },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRevision",
+        "dirtyWorktreeDigest",
+        "inputPaths",
+        "generatedArtifacts",
+        "configuration",
+        "contractRevision",
+        "environmentFingerprint",
+        "hostCapabilityBasis"
+      ],
+      "properties": {
+        "sourceRevision": { "type": "integer", "minimum": 0 },
+        "dirtyWorktreeDigest": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "inputPaths": { "type": "array", "items": { "$ref": "#/$defs/pathDigest" } },
+        "generatedArtifacts": { "type": "array", "items": { "$ref": "#/$defs/pathDigest" } },
+        "configuration": { "type": "array", "items": { "$ref": "#/$defs/configurationDigest" } },
+        "contractRevision": { "type": "string", "minLength": 1 },
+        "environmentFingerprint": { "type": "string", "minLength": 1 },
+        "hostCapabilityBasis": { "type": "string", "minLength": 1 }
+      }
+    },
+    "invalidationScope": { "type": "array", "items": { "type": "string" } },
+    "outcome": { "type": "string", "minLength": 1 },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "actor": { "type": "string", "minLength": 1 },
+    "evidenceFile": { "type": "string", "minLength": 1 },
+    "relatedArtifacts": { "type": "array", "items": { "type": "string" } },
+    "nextAction": { "type": ["string", "null"] }
+  }
+}

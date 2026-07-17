@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "stateRevision": 0,
+  "projectName": "Contradictory Close Project",
+  "mode": "standard",
+  "phase": "Close the change only when state and artifacts agree.",
+  "currentSummary": "verification",
+  "currentSlice": {
+    "activeChangeId": "contradictory-close"
+  },
+  "activeChangeId": null,
+  "updatedAt": "2026-07-16T00:00:00.000Z"
+}

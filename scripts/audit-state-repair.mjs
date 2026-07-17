@@ -4,6 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { executeTransaction } from './core/persistence/transaction.mjs'
+import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+
 const args = process.argv.slice(2)
 
 function readArg(name, fallback = null) {
@@ -99,7 +102,7 @@ function latestEvidenceFileExists(target, latest) {
   return latest?.evidenceFile ? fs.existsSync(path.join(target, latest.evidenceFile)) : false
 }
 
-export function auditStateRepair(target, options = {}) {
+export async function auditStateRepair(target, options = {}) {
   const resolvedTarget = path.resolve(target)
   const writeChanges = Boolean(options.write)
   const riskLimit = Number(options.maxActiveRisks ?? maxActiveRisks)
@@ -171,7 +174,15 @@ export function auditStateRepair(target, options = {}) {
       if (writeChanges) {
         const backupPath = backupFile(statePath)
         const repairedState = compactRisks(state, riskLimit)
-        fs.writeFileSync(statePath, JSON.stringify(repairedState, null, 2) + '\n', 'utf8')
+        const transaction = await executeTransaction({
+          target: resolvedTarget,
+          operationId: `audit-state-repair-${Date.now()}`,
+          expectedRevision: state.stateRevision,
+          writes: [{ kind: 'json-replace', path: '.gse/state.json', value: repairedState }],
+          events: [],
+          allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
+        })
+        if (transaction.status !== 'complete') throw new Error(transaction.message)
         writes.push({
           action: 'compact-residual-risks',
           targetPath: '.gse/state.json',
@@ -309,7 +320,7 @@ function createFixture(kind) {
   return dir
 }
 
-function runSelfTest() {
+async function runSelfTest() {
   const clean = createFixture('clean')
   const badState = createFixture('bad-state')
   const badJsonl = createFixture('bad-jsonl')
@@ -317,12 +328,12 @@ function runSelfTest() {
   const stale = createFixture('stale')
   const writeFixture = createFixture('overlong')
   const reports = {
-    clean: auditStateRepair(clean),
-    badState: auditStateRepair(badState),
-    badJsonl: auditStateRepair(badJsonl),
-    overlong: auditStateRepair(overlong),
-    stale: auditStateRepair(stale),
-    write: auditStateRepair(writeFixture, { write: true }),
+    clean: await auditStateRepair(clean),
+    badState: await auditStateRepair(badState),
+    badJsonl: await auditStateRepair(badJsonl),
+    overlong: await auditStateRepair(overlong),
+    stale: await auditStateRepair(stale),
+    write: await auditStateRepair(writeFixture, { write: true }),
   }
   const checks = [
     { id: 'SR-T01', status: reports.clean.summary.status === 'clean' ? 'passed' : 'failed', evidence: reports.clean.summary.status },
@@ -351,7 +362,7 @@ function runSelfTest() {
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 
 if (isCli) {
-  const report = selfTest ? runSelfTest() : auditStateRepair(targetArg, { write })
+  const report = selfTest ? await runSelfTest() : await auditStateRepair(targetArg, { write })
 
   if (jsonOnly) console.log(JSON.stringify(report, null, 2))
   else console.log(JSON.stringify(report, null, 2))

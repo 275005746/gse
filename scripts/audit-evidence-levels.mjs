@@ -12,7 +12,8 @@ function readArg(name, fallback = null) {
   return args[index + 1] ?? fallback
 }
 
-const root = path.resolve(readArg('--root', path.join(import.meta.dirname, '..')))
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
+const root = path.resolve(readArg('--root', path.join(scriptDirectory, '..')))
 const targetArg = readArg('--target')
 const jsonOnly = args.includes('--json')
 
@@ -76,6 +77,9 @@ export function analyzeEvidenceLevels(records) {
       evidenceLevel: record.evidenceLevel,
       requiredEvidenceLevel: record.requiredEvidenceLevel,
     }))
+  const missingDependencies = records
+    .filter((record) => record.schemaVersion === 1 && (!record.changeId || !Number.isInteger(record.stateRevision) || !record.dependencies))
+    .map((record) => record.summary || record.claim || record.recordType || '(unknown)')
   return {
     allowed: evidenceLevels,
     records: records.length,
@@ -83,6 +87,7 @@ export function analyzeEvidenceLevels(records) {
     missingLevel,
     invalidLevel,
     downgraded,
+    missingDependencies,
   }
 }
 

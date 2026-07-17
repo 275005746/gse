@@ -1,19 +1,26 @@
 # GSE Host Runtime Evidence Handoff
 
-Generated: 2026-07-08T04:34:46.653Z
+Generated: 2026-07-17T14:08:16.646Z
 Root: <gse-root>
 
 ## Purpose
 
 Turn cross-host support into auditable runtime evidence. Generated adapters, docs, or command pointers are useful setup, but they are not proof that a host actually invoked GSE.
 
+## Fast Path
+
+- Native slash-command evidence is the final external gate.
+- If a host can invoke `/gse continue` natively, record that first.
+- Use portable text-command records only when native slash-command proof is unavailable.
+- Keep host capability status separate from portable `.gse/` workflow status.
+
 ## Current Runtime Evidence
 
-- Host runtime invocation records: 2
-- Verified or accepted records: 2
-- Hosts with records: Codex app background thread, Node.js npm package runtime
+- Host runtime invocation records: 0
+- Verified or accepted records: 0
+- Hosts with records: none
 - Native slash-command records: 0
-- Portable text-command records: 1
+- Portable text-command records: 0
 - Audit command: `node scripts/audit-host-runtime-invocations.mjs --root __GSE_OR_PROJECT__ --json`
 
 ## Host Evidence Plan
@@ -116,4 +123,4 @@ node scripts/validate-gse.mjs --root __GSE_OR_PROJECT__ --json
 
 ## Next Action
 
-Record real invocation evidence for Claude Code-style, Hermes/AION-style, WorkBuddy/other IDE agents, and any host-native slash-command mechanism that becomes available.
+Record real invocation evidence for Claude Code-style, Hermes/AION-style, WorkBuddy/other IDE agents, and any host-native slash-command mechanism that becomes available. Start with native slash-command proof when the host supports it.

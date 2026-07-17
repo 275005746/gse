@@ -3,8 +3,17 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { analyzeEvidenceLevels } from './audit-evidence-levels.mjs'
 import { readRoleDispatchFallback } from './audit-role-dispatch-fallback.mjs'
+import { compareDerivedChange, deriveActiveChange } from './core/change-state.mjs'
+import { currentEvidenceBasis, deriveCurrentEvidenceDependencies } from './core/evidence-basis.mjs'
+import { evaluateCloseConsistency, evaluateEvidenceFreshness } from './core/evidence.mjs'
+import { readAtomicJson } from './core/persistence/atomic-json.mjs'
+import { readCommittedJsonl } from './core/persistence/jsonl.mjs'
+import { inspectPendingTransactions } from './core/persistence/recovery.mjs'
+import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+import { executeTransaction } from './core/persistence/transaction.mjs'
 
 const args = process.argv.slice(2)
 
@@ -126,91 +135,119 @@ function check(id, label, status, evidence, recommendation = '') {
   return { id, label, status, evidence, recommendation }
 }
 
-function createFixture() {
+async function createFixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gse-close-gate-'))
+  const changeId = 'fixture-close'
+  const changeDir = path.join(dir, '.gse', 'changes', changeId)
   fs.mkdirSync(path.join(dir, '.gse', 'evidence'), { recursive: true })
   fs.mkdirSync(path.join(dir, '.gse', 'agents'), { recursive: true })
+  fs.mkdirSync(changeDir, { recursive: true })
   fs.writeFileSync(path.join(dir, '.gse', 'README.md'), '# GSE\n', 'utf8')
   fs.writeFileSync(path.join(dir, '.gse', 'project-profile.md'), '# Project Profile\n', 'utf8')
   fs.writeFileSync(path.join(dir, '.gse', 'goal-map.md'), '# Goal Map\n\nNext action: archive slice.\n', 'utf8')
   fs.writeFileSync(path.join(dir, '.gse', 'quality-gates.md'), '# Quality Gates\n\n## Universal\n\n- Evidence required.\n', 'utf8')
   fs.writeFileSync(path.join(dir, '.gse', 'evidence', '2026-07-06.md'), '# Evidence\n\nEvidence status: verified.\n', 'utf8')
-  fs.writeFileSync(
-    path.join(dir, '.gse', 'state.json'),
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        projectName: 'fixture-product',
-        mode: 'standard',
-        canonicalPlan: '',
-        phase: 'verify',
-        currentSlice: {
-          id: 'fixture-close',
-          outcome: 'Fixture close gate.',
-          status: 'verified',
-          nextAction: 'Archive slice.',
-        },
-        toolStatuses: {
-          browser: 'unknown',
-          lsp: 'unknown',
-          mcp: 'unknown',
-          subagents: 'unknown',
-          ci: 'unknown',
-        },
-        lastEvidence: '.gse/evidence/2026-07-06.md',
-        residualRisks: ['Fixture residual risk.'],
-      },
-      null,
-      2,
-    ) + '\n',
-    'utf8',
-  )
-  fs.writeFileSync(
-    path.join(dir, '.gse', 'evidence', 'index.jsonl'),
-    JSON.stringify({
+  for (const [name, content] of [
+    ['brief.md', '# Fixture close\n'], ['spec.md', '# Spec\n'], ['design.md', '# Design\n'],
+    ['tasks.md', '# Tasks\n'], ['evidence.md', '# Evidence\n'], ['review.md', '# Review\n\n## Closure\n'],
+  ]) fs.writeFileSync(path.join(changeDir, name), content, 'utf8')
+
+  const state = {
+    schemaVersion: 1,
+    stateRevision: 1,
+    sourceRevision: 1,
+    activeChangeId: changeId,
+    projectName: 'fixture-product',
+    mode: 'standard',
+    canonicalPlan: '',
+    phase: 'verify',
+    currentSlice: { id: changeId, outcome: 'Fixture close gate.', status: 'verified', nextAction: 'Archive slice.' },
+    toolStatuses: { browser: 'unknown', lsp: 'unknown', mcp: 'unknown', subagents: 'unknown', ci: 'unknown' },
+    lastEvidence: '.gse/evidence/2026-07-06.md',
+    residualRisks: ['Fixture residual risk.'],
+  }
+  fs.writeFileSync(path.join(dir, '.gse', 'state.json'), `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+  const activeChange = deriveActiveChange(dir, changeId, { stateRevision: 1 })
+  fs.writeFileSync(path.join(changeDir, 'change.json'), `${JSON.stringify(activeChange, null, 2)}\n`, 'utf8')
+  runGit(dir, ['init'])
+  runGit(dir, ['config', 'user.email', 'gse-fixture@example.local'])
+  runGit(dir, ['config', 'user.name', 'GSE Fixture'])
+  runGit(dir, ['add', '.'])
+  runGit(dir, ['commit', '-m', 'fixture baseline'])
+  const dependencies = deriveCurrentEvidenceDependencies(dir, {
+    projectState: state,
+    activeChange,
+  })
+  const timestamp = '2026-07-06T00:00:00.000Z'
+  await executeTransaction({
+    target: dir,
+    operationId: 'close-gate-fixture-evidence',
+    expectedRevision: 1,
+    writes: [],
+    events: [{ path: '.gse/evidence/index.jsonl', event: {
+      schemaVersion: 1,
+      eventId: 'fixture-close-evidence',
       date: '2026-07-06',
-      recordType: 'slice',
+      timestamp,
+      recordType: 'evidence-event',
+      changeId,
+      taskId: null,
+      stateRevision: 2,
       status: 'verified',
       evidenceLevel: 'verified-unit',
       requiredEvidenceLevel: 'verified-unit',
       summary: 'Fixture close gate evidence.',
+      claim: 'Fixture close gate evidence.',
+      evidenceClass: 'test',
+      method: 'fixture',
+      dependencies,
+      invalidationScope: ['stateRevision', 'dependencies'],
+      outcome: 'passed',
+      limitations: [],
+      actor: 'fixture',
       evidenceFile: '.gse/evidence/2026-07-06.md',
+      relatedArtifacts: [],
       commands: ['node scripts/audit-close-gate.mjs --self-test'],
       nextAction: 'Archive slice.',
-    }) + '\n',
-    'utf8',
-  )
-  fs.writeFileSync(
-    path.join(dir, '.gse', 'agents', 'role-fallback-packets.md'),
-    [
-      '# Role Fallback Packets',
-      '',
-      '| Role | Mode | Real delegation used | Tool status | Fallback output | Evidence | Stop condition | Write access |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Planner | sequential-role | no | unknown | Plan | fixture plan | Plan accepted | read-only |',
-      '| Locator | sequential-role | no | unknown | File map | fixture map | Files identified | read-only |',
-      '| Implementer | sequential-role | no | unknown | Patch | fixture patch | Patch complete | assigned files |',
-      '| Verifier | sequential-role | no | unknown | Test results | fixture tests | Focused checks pass | evidence only |',
-      '| Reviewer | sequential-role | no | unknown | Review notes | fixture review | No blocking findings | read-only |',
-      '| Docs/Evidence | sequential-role | no | unknown | Evidence log | fixture evidence | Evidence recorded | docs/evidence only |',
-      '| Release | sequential-role | no | unknown | Claim boundary | fixture release | External gates visible | read-only |',
-      '',
-    ].join('\n'),
-    'utf8',
-  )
-  runGit(dir, ['init'])
-  runGit(dir, ['config', 'user.email', 'gse-fixture@example.local'])
-  runGit(dir, ['config', 'user.name', 'GSE Fixture'])
+    } }],
+    allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
+  })
+  const revised = deriveActiveChange(dir, changeId, { stateRevision: 2 })
+  fs.writeFileSync(path.join(changeDir, 'change.json'), `${JSON.stringify(revised, null, 2)}\n`, 'utf8')
+
+  fs.writeFileSync(path.join(dir, '.gse', 'agents', 'role-fallback-packets.md'), [
+    '# Role Fallback Packets', '',
+    '| Role | Mode | Real delegation used | Tool status | Fallback output | Evidence | Stop condition | Write access |',
+    '|---|---|---|---|---|---|---|---|',
+    '| Planner | sequential-role | no | unknown | Plan | fixture plan | Plan accepted | read-only |',
+    '| Locator | sequential-role | no | unknown | File map | fixture map | Files identified | read-only |',
+    '| Implementer | sequential-role | no | unknown | Patch | fixture patch | Patch complete | assigned files |',
+    '| Verifier | sequential-role | no | unknown | Test results | fixture tests | Focused checks pass | evidence only |',
+    '| Reviewer | sequential-role | no | unknown | Review notes | fixture review | No blocking findings | read-only |',
+    '| Docs/Evidence | sequential-role | no | unknown | Evidence log | fixture evidence | Evidence recorded | docs/evidence only |',
+    '| Release | sequential-role | no | unknown | Claim boundary | fixture release | External gates visible | read-only |', '',
+  ].join('\n'), 'utf8')
   runGit(dir, ['add', '.'])
   runGit(dir, ['commit', '-m', 'fixture'])
   return dir
 }
 
-function auditCloseGate(target) {
+export function auditCloseGate(target, { requestedStatus = 'verified' } = {}) {
   const resolvedTarget = path.resolve(target)
   const gseDir = path.join(resolvedTarget, '.gse')
   const state = readJson(path.join(gseDir, 'state.json'))
-  const evidenceIndex = readJsonl(path.join(gseDir, 'evidence', 'index.jsonl'))
+  let committedEvidence
+  try {
+    committedEvidence = readCommittedJsonl(resolvedTarget, '.gse/evidence/index.jsonl', { allowMissing: true })
+  } catch (error) {
+    committedEvidence = { records: [], corruptTail: [{ reasonCode: error.code ?? 'READ_FAILED' }] }
+  }
+  const evidenceIndex = {
+    exists: fs.existsSync(path.join(gseDir, 'evidence', 'index.jsonl')),
+    ok: committedEvidence.corruptTail.length === 0,
+    records: committedEvidence.records,
+    error: committedEvidence.corruptTail.map((item) => item.reasonCode).join(', '),
+  }
   const evidenceLevelAnalysis = analyzeEvidenceLevels(evidenceIndex.records)
   const checks = []
 
@@ -328,7 +365,7 @@ function auditCloseGate(target) {
 
   const evidenceLevelStatus = evidenceLevelAnalysis.invalidLevel.length > 0
     ? 'failed'
-    : evidenceLevelAnalysis.downgraded.length > 0 || evidenceLevelAnalysis.missingLevel.length > 0
+    : evidenceLevelAnalysis.downgraded.length > 0 || evidenceLevelAnalysis.missingLevel.length > 0 || evidenceLevelAnalysis.missingDependencies.length > 0
       ? 'warning'
       : 'passed'
   checks.push(
@@ -338,11 +375,11 @@ function auditCloseGate(target) {
       evidenceLevelStatus,
       evidenceLevelAnalysis.invalidLevel.length
         ? `invalid evidence level(s): ${evidenceLevelAnalysis.invalidLevel.map((item) => `${item.summary}:${item.evidenceLevel}`).join('; ')}`
-        : `${evidenceLevelAnalysis.recordsWithLevel}/${evidenceLevelAnalysis.records} record(s) with evidenceLevel; ${evidenceLevelAnalysis.downgraded.length} downgrade(s); ${evidenceLevelAnalysis.missingLevel.length} historical missing`,
+        : `${evidenceLevelAnalysis.recordsWithLevel}/${evidenceLevelAnalysis.records} record(s) with evidenceLevel; ${evidenceLevelAnalysis.downgraded.length} downgrade(s); ${evidenceLevelAnalysis.missingLevel.length} historical missing; ${evidenceLevelAnalysis.missingDependencies.length} schema-v1 missing dependency metadata`,
       evidenceLevelAnalysis.invalidLevel.length
         ? 'Use one of the evidence levels from references/evidence-taxonomy.md.'
-        : evidenceLevelAnalysis.downgraded.length
-          ? 'Record whether the downgrade is acceptable for this slice before claiming browser, CI, owner, or release proof.'
+        : evidenceLevelAnalysis.downgraded.length || evidenceLevelAnalysis.missingDependencies.length
+          ? 'Record whether the downgrade is acceptable; schema-v1 records missing dependency metadata cannot satisfy revision-aware Close.'
           : '',
     ),
   )
@@ -412,6 +449,57 @@ function auditCloseGate(target) {
           ? 'Keep generated artifacts out of the commit or explain why they are required.'
           : '',
     ),
+  )
+
+  const projectState = state.ok ? state.data : null
+  const activeChangeId = projectState?.activeChangeId
+  const hasActiveChangeReference = typeof activeChangeId === 'string'
+  const activeChange = hasActiveChangeReference
+    ? readAtomicJson(resolvedTarget, `.gse/changes/${activeChangeId}/change.json`, { allowMissing: true })
+    : null
+  const pendingInspection = inspectPendingTransactions(resolvedTarget)
+  const pendingTransactions = [
+    ...(pendingInspection.transactions ?? []),
+    ...(pendingInspection.diagnostics ?? []).map((diagnostic) => ({ status: 'blocked', diagnostic })),
+  ]
+  const currentBasis = projectState && activeChange
+    ? currentEvidenceBasis(resolvedTarget, { projectState, activeChange, evidenceRecords: evidenceIndex.records })
+    : null
+  const consistency = evaluateCloseConsistency(resolvedTarget, {
+    projectState,
+    activeChange,
+    evidenceRecords: evidenceIndex.records,
+    currentDependencies: currentBasis,
+    pendingTransactions,
+    requestedStatus,
+  })
+  const revisionAgreement = Number.isInteger(projectState?.stateRevision)
+    && projectState.stateRevision === activeChange?.stateRevision
+    && projectState.activeChangeId === activeChange?.changeId
+  let derivedAgreement = false
+  try {
+    const derived = activeChange ? deriveActiveChange(resolvedTarget, activeChange.changeId, { stateRevision: projectState.stateRevision }) : null
+    derivedAgreement = Boolean(derived && compareDerivedChange(activeChange, derived).status === 'proceed')
+  } catch {}
+  const currentProof = evidenceIndex.records.filter((record) =>
+    record?.changeId === activeChangeId
+    && record?.stateRevision === projectState?.stateRevision
+    && typeof record?.claim === 'string'
+    && record.claim.length > 0
+    && ['verified', 'accepted'].includes(record?.status)
+    && currentBasis !== null
+    && evaluateEvidenceFreshness(resolvedTarget, record, currentBasis).current)
+  const highestStatus = currentProof.some((record) => record.status === 'accepted') ? 'accepted' : currentProof.some((record) => record.status === 'verified') ? 'verified' : null
+  const promotionSafe = requestedStatus === 'result'
+    || requestedStatus === highestStatus
+    || (requestedStatus === 'verified' && highestStatus === 'accepted')
+
+  checks.push(
+    check('CG13', 'no pending or unrecoverable transaction', statusFrom(pendingTransactions.length === 0), pendingTransactions.length === 0 ? 'no pending transactions' : `${pendingTransactions.length} pending or blocked transaction artifact(s)`, 'Recover or repair transactions before Close.'),
+    check('CG14', 'project state and active Change revision agree', hasActiveChangeReference ? statusFrom(revisionAgreement) : 'passed', hasActiveChangeReference ? (revisionAgreement ? `revision:${projectState.stateRevision}, change:${activeChangeId}` : 'state/change identity or revision mismatch') : 'not applicable: no active Change reference', hasActiveChangeReference && !revisionAgreement ? 'Reconcile project state and active Change cache.' : ''),
+    check('CG15', 'derived Change cache matches current source digests', hasActiveChangeReference ? statusFrom(derivedAgreement) : 'passed', hasActiveChangeReference ? (derivedAgreement ? 'derived source digests match cache' : 'derived source/cache contradiction') : 'not applicable: no active Change cache', hasActiveChangeReference && !derivedAgreement ? 'Refresh or repair the active Change cache.' : ''),
+    check('CG16', 'current claim-matched evidence belongs to active Change/revision', hasActiveChangeReference ? statusFrom(currentProof.length > 0) : 'passed', hasActiveChangeReference ? (currentProof.length ? `${currentProof.length} current evidence record(s)` : consistency.reasonCode) : 'not applicable: no active Change claim', hasActiveChangeReference && currentProof.length === 0 ? 'Record current committed revision-aware evidence.' : ''),
+    check('CG17', 'requested Close status does not silently promote evidence', hasActiveChangeReference ? statusFrom(promotionSafe && consistency.reasonCode !== 'EVIDENCE_LEVEL_INSUFFICIENT') : 'passed', hasActiveChangeReference ? (promotionSafe ? `requested:${requestedStatus}, highest:${highestStatus}` : `promotion blocked: requested:${requestedStatus}, highest:${highestStatus}`) : 'not applicable: no active Change to close', hasActiveChangeReference && (!promotionSafe || consistency.reasonCode === 'EVIDENCE_LEVEL_INSUFFICIENT') ? 'Record evidence at the requested status; Close never promotes it.' : ''),
   )
 
   const failed = checks.filter((item) => item.status === 'failed').length
@@ -502,8 +590,15 @@ function renderMarkdown(report) {
   return lines.join('\n') + '\n'
 }
 
-const target = selfTest ? createFixture() : targetArg
-const report = auditCloseGate(target)
-
-if (jsonOnly) console.log(JSON.stringify(report, null, 2))
-else console.log(renderMarkdown(report))
+const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+if (isCli) {
+  const target = selfTest ? await createFixture() : targetArg
+  try {
+    const report = auditCloseGate(target)
+    if (jsonOnly) console.log(JSON.stringify(report, null, 2))
+    else console.log(renderMarkdown(report))
+    if (report.summary.failed > 0) process.exitCode = 1
+  } finally {
+    if (selfTest) fs.rmSync(target, { recursive: true, force: true })
+  }
+}
