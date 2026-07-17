@@ -518,6 +518,39 @@ The first focused audit chain stopped after `audit-final-form-stale-copy.mjs` fa
 
 ---
 
+## [ERR-20260717-014] npm_version_wrong_working_directory
+
+**Logged**: 2026-07-17T14:35:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: config
+
+### Summary
+`npm version` ran in the session launch directory instead of the release repository.
+
+### Error
+```text
+The command changed quote-proposal-mvp from 0.1.0 to 1.1.0 while the GSE repository remained unchanged.
+```
+
+### Context
+- Operation attempted: update `@t275005746/gse` to version `1.1.0`.
+- The command omitted npm's `--prefix` option even though the target repository differs from the session working directory.
+- Only the accidental `package.json` version field was restored; pre-existing launch-directory changes were preserved.
+
+### Suggested Fix
+For npm commands targeting another repository, pass `--prefix <repository>` explicitly and verify the target worktree immediately afterward.
+
+### Metadata
+- Reproducible: yes
+- Related Files: package.json
+
+### Resolution
+- **Resolved**: 2026-07-17T14:35:00Z
+- **Notes**: Restored the accidental launch-directory version change and switched the release workflow to an explicit npm prefix.
+
+---
+
 ## [ERR-20260717-013] github_push_network_unreachable
 
 **Logged**: 2026-07-17T14:30:00Z
