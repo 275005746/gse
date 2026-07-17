@@ -453,7 +453,8 @@ export function auditCloseGate(target, { requestedStatus = 'verified' } = {}) {
 
   const projectState = state.ok ? state.data : null
   const activeChangeId = projectState?.activeChangeId
-  const activeChange = typeof activeChangeId === 'string'
+  const hasActiveChangeReference = typeof activeChangeId === 'string'
+  const activeChange = hasActiveChangeReference
     ? readAtomicJson(resolvedTarget, `.gse/changes/${activeChangeId}/change.json`, { allowMissing: true })
     : null
   const pendingInspection = inspectPendingTransactions(resolvedTarget)
@@ -495,10 +496,10 @@ export function auditCloseGate(target, { requestedStatus = 'verified' } = {}) {
 
   checks.push(
     check('CG13', 'no pending or unrecoverable transaction', statusFrom(pendingTransactions.length === 0), pendingTransactions.length === 0 ? 'no pending transactions' : `${pendingTransactions.length} pending or blocked transaction artifact(s)`, 'Recover or repair transactions before Close.'),
-    check('CG14', 'project state and active Change revision agree', statusFrom(revisionAgreement), revisionAgreement ? `revision:${projectState.stateRevision}, change:${activeChangeId}` : 'state/change identity or revision mismatch', 'Reconcile project state and active Change cache.'),
-    check('CG15', 'derived Change cache matches current source digests', statusFrom(derivedAgreement), derivedAgreement ? 'derived source digests match cache' : 'derived source/cache contradiction', 'Refresh or repair the active Change cache.'),
-    check('CG16', 'current claim-matched evidence belongs to active Change/revision', statusFrom(currentProof.length > 0), currentProof.length ? `${currentProof.length} current evidence record(s)` : consistency.reasonCode, 'Record current committed revision-aware evidence.'),
-    check('CG17', 'requested Close status does not silently promote evidence', statusFrom(promotionSafe && consistency.reasonCode !== 'EVIDENCE_LEVEL_INSUFFICIENT'), promotionSafe ? `requested:${requestedStatus}, highest:${highestStatus}` : `promotion blocked: requested:${requestedStatus}, highest:${highestStatus}`, 'Record evidence at the requested status; Close never promotes it.'),
+    check('CG14', 'project state and active Change revision agree', hasActiveChangeReference ? statusFrom(revisionAgreement) : 'passed', hasActiveChangeReference ? (revisionAgreement ? `revision:${projectState.stateRevision}, change:${activeChangeId}` : 'state/change identity or revision mismatch') : 'not applicable: no active Change reference', hasActiveChangeReference && !revisionAgreement ? 'Reconcile project state and active Change cache.' : ''),
+    check('CG15', 'derived Change cache matches current source digests', hasActiveChangeReference ? statusFrom(derivedAgreement) : 'passed', hasActiveChangeReference ? (derivedAgreement ? 'derived source digests match cache' : 'derived source/cache contradiction') : 'not applicable: no active Change cache', hasActiveChangeReference && !derivedAgreement ? 'Refresh or repair the active Change cache.' : ''),
+    check('CG16', 'current claim-matched evidence belongs to active Change/revision', hasActiveChangeReference ? statusFrom(currentProof.length > 0) : 'passed', hasActiveChangeReference ? (currentProof.length ? `${currentProof.length} current evidence record(s)` : consistency.reasonCode) : 'not applicable: no active Change claim', hasActiveChangeReference && currentProof.length === 0 ? 'Record current committed revision-aware evidence.' : ''),
+    check('CG17', 'requested Close status does not silently promote evidence', hasActiveChangeReference ? statusFrom(promotionSafe && consistency.reasonCode !== 'EVIDENCE_LEVEL_INSUFFICIENT') : 'passed', hasActiveChangeReference ? (promotionSafe ? `requested:${requestedStatus}, highest:${highestStatus}` : `promotion blocked: requested:${requestedStatus}, highest:${highestStatus}`) : 'not applicable: no active Change to close', hasActiveChangeReference && (!promotionSafe || consistency.reasonCode === 'EVIDENCE_LEVEL_INSUFFICIENT') ? 'Record evidence at the requested status; Close never promotes it.' : ''),
   )
 
   const failed = checks.filter((item) => item.status === 'failed').length

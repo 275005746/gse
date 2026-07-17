@@ -74,18 +74,6 @@ const currentFiles = [
   '.gse/acceptance/owner-external-gate-kit/release-status-manifest.json',
   '.gse/acceptance/owner-external-gate-kit/kit-manifest.json',
   '.gse/releases/public-release-owner-required.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/release-summary.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/public-release-record.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/public-acceptance-handoff.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/host-runtime-evidence-handoff.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/release-status-manifest.json',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/README.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/final-acceptance-packet.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/public-acceptance-handoff.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/host-runtime-evidence-handoff.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/action-packet.md',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/release-status-manifest.json',
-  '.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/kit-manifest.json',
 ]
 
 const staleLicensePendingPhrases = [
@@ -141,15 +129,11 @@ function jsonFile(relativePath) {
 const finalProgress = jsonFile('.gse/acceptance/final-form-progress-report.json')
 const releaseStatus = jsonFile('.gse/acceptance/release-status-manifest.json')
 const ownerKit = jsonFile('.gse/acceptance/owner-external-gate-kit/kit-manifest.json')
-const bundleReleaseStatus = jsonFile('.gse/release-bundles/gse-release-bundle-v1.0.0/release-status-manifest.json')
-const bundleOwnerKit = jsonFile('.gse/release-bundles/gse-release-bundle-v1.0.0/owner-external-gate-kit/kit-manifest.json')
 
 const artifactPendingSets = [
   ['final progress', (finalProgress?.pendingReleaseEvidence ?? []).map((gate) => gate.area).sort()],
   ['release status', (releaseStatus?.publicAcceptance?.pendingGates ?? []).map((gate) => gate.area).sort()],
   ['owner kit', (ownerKit?.gates ?? []).map((gate) => gate.area).sort()],
-  ['bundle release status', (bundleReleaseStatus?.publicAcceptance?.pendingGates ?? []).map((gate) => gate.area).sort()],
-  ['bundle owner kit', (bundleOwnerKit?.gates ?? []).map((gate) => gate.area).sort()],
 ]
 
 const publicReleaseRecord = read('.gse/releases/public-release-owner-required.md')

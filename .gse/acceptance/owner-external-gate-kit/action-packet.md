@@ -1,9 +1,12 @@
 # GSE Owner / External Action Packet
 
-Public accepted: verified
+Public accepted: not-accepted
 
 ## Pending Gates
 
+- 05-public-registry-publication: Public registry publication -> external registry
+- 06-marketplace-approval: Marketplace approval -> external marketplace
+- 08-other-host-runtime-invocation: Other host runtime invocation -> host runtime
 
 ## First Action
 

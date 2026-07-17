@@ -1,21 +1,38 @@
 # GSE Final-Form Progress Report
 
-Generated: 2026-07-09T06:43:37.014Z
+Generated: 2026-07-17T14:08:15.981Z
 Root: <gse-root>
 
 ## Summary
 
-- Status: accepted
+- Status: release-evidence-pending
 - Local engineering readiness: 100%
-- Full final-form readiness: 100%
+- Full final-form readiness: 83%
 - Scoring basis: local engineering excludes owner-required and external-required rows; full final-form counts every readiness row
-- Public accepted: verified
-- Matrix rows: 23 verified, 0 owner-required, 0 external-required, 1 not-claimed, 24 total
-- Local rows: 23
+- Public accepted: not-accepted
+- Matrix rows: 20 verified, 0 owner-required, 3 external-required, 1 not-claimed, 24 total
+- Local rows: 20
 
 ## Pending Release Evidence
 
-- None reported by final readiness. Re-run close gate and release audits before claiming completion.
+- Public registry publication: external-required
+  - Owner: external registry
+  - Evidence now: no public registry publication record is claimed
+  - Required evidence: Real registry package URL, version, digest, publication date, verification command, and accepted evidence.
+  - Preflight command: `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json`
+  - Record command: `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force`
+- Marketplace approval: external-required
+  - Owner: external marketplace
+  - Evidence now: references/marketplace-discovery.md
+  - Required evidence: Real marketplace or catalog listing URL, approval/publication status, review date, and accepted evidence.
+  - Preflight command: `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type marketplace --channel-name __MARKETPLACE_NAME__ --channel-url __MARKETPLACE_LISTING_URL__ --version __VERSION__ --review-status approved --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __MARKETPLACE_LISTING_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-marketplace-approval true --proves-channel-installability true --evidence-status accepted --force --dry-run --json`
+  - Record command: `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type marketplace --channel-name __MARKETPLACE_NAME__ --channel-url __MARKETPLACE_LISTING_URL__ --version __VERSION__ --review-status approved --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __MARKETPLACE_LISTING_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-marketplace-approval true --proves-channel-installability true --evidence-status accepted --force`
+- Other host runtime invocation: external-required
+  - Owner: host runtime
+  - Evidence now: 0 verified/accepted host record(s), 0 portable text record(s)
+  - Required evidence: Real runtime invocation record for each claimed host, including evidence URL/path, accepted status, and no generated-pointer dependency.
+  - Preflight command: `node scripts/record-host-invocation.mjs --root __GSE__ --host __HOST__ --host-version __VERSION_OR_UNKNOWN__ --project gse --adapter-path __HOST_ADAPTER_OR_RUNTIME_ENTRYPOINT__ --invocation-method __HOST_UI_COMMAND_RUNTIME_BRIDGE_PLUGIN_COMMAND_AGENT_COMMAND__ --command "/gse continue" --status accepted --evidence-owner __OWNER__ --evidence __THREAD_TRANSCRIPT_SCREENSHOT_TERMINAL_OUTPUT_OR_HOST_LOG__ --verification-command "node scripts/audit-final-readiness.mjs --root __GSE__ --json" --native-slash-command false --portable-text-command false --generated-pointer false --owner-acceptance-required false --force --dry-run --json`
+  - Record command: `node scripts/record-host-invocation.mjs --root __GSE__ --host __HOST__ --host-version __VERSION_OR_UNKNOWN__ --project gse --adapter-path __HOST_ADAPTER_OR_RUNTIME_ENTRYPOINT__ --invocation-method __HOST_UI_COMMAND_RUNTIME_BRIDGE_PLUGIN_COMMAND_AGENT_COMMAND__ --command "/gse continue" --status accepted --evidence-owner __OWNER__ --evidence __THREAD_TRANSCRIPT_SCREENSHOT_TERMINAL_OUTPUT_OR_HOST_LOG__ --verification-command "node scripts/audit-final-readiness.mjs --root __GSE__ --json" --native-slash-command false --portable-text-command false --generated-pointer false --owner-acceptance-required false --force`
 
 ## Verified Capabilities
 
@@ -37,16 +54,13 @@ Root: <gse-root>
 - Public security contact record: verified (record/audit public security contact scripts and template)
 - Public security contact: verified (.gse/releases/public-security-contact-owner-required.md)
 - Public channel publication record: verified (record/audit public channel publication scripts and template)
-- Public registry publication: verified (.gse/releases/public-registry-publication-npm.md)
-- Marketplace approval: verified (.gse/releases/public-channel-publication-pending.md)
 - Portable command execution: verified (run-gse-command and audit-command-execution)
 - Host adapters: verified (command adapter generator and audit)
-- Other host runtime invocation: verified (.gse/evidence/host-invocations/2026-07-07-node-npm-package-runtime.md)
 
 ## Claim Boundary
 
 - May claim local engineering readiness: true
-- May claim public accepted final form: true
+- May claim public accepted final form: false
 - Cannot claim public security contact acceptance unless accepted owner evidence exists
 - Cannot claim public repository settings unless real repository evidence exists
 - Cannot claim public CI unless a real successful public CI run is recorded

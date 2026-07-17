@@ -128,8 +128,8 @@ Before retrying a structured tool call, compare the supplied numeric argument wi
 
 ### Recurrence
 - **Last-Seen**: 2026-07-17
-- **Recurrence-Count**: 6
-- **Notes**: The same malformed oversized offset recurred during Task #15 even after switching to a semantic smoke. Stop using offset-based Read for `run-gse-command.mjs` in this task; use Grep by symbol and full-file syntax/runtime checks instead.
+- **Recurrence-Count**: 8
+- **Notes**: The malformed offset pattern recurred twice while inspecting `audit-close-gate.mjs` (2200 and 57000 for a 604-line file). Offset-based Read is prohibited for this file; use full-file Read or Grep context only.
 
 ---
 
@@ -446,5 +446,74 @@ Confirm script-specific test entrypoints from package scripts, validator wiring,
 ### Resolution
 - **Resolved**: 2026-07-17T13:10:00Z
 - **Notes**: Classified as an invalid probe; the supported Close audit entrypoint will be located from repository evidence and run instead.
+
+---
+
+## [ERR-20260717-011] release_validation_gate_failed
+
+**Logged**: 2026-07-17T13:29:00Z
+**Priority**: high
+**Status**: resolved
+**Area**: tests
+
+### Summary
+Release validation and the PR validation workflow failed before the 1.1.0 release.
+
+### Error
+```text
+npm run validate:release: 29 passed, 6 failed, 35 total
+GitHub Actions Validate skill package: failure
+```
+
+### Context
+- Operation attempted: validate PR #1 before merging and publishing GitHub Release plus npm version 1.1.0.
+- The release flow was paused before merge, tag, release, or npm publication.
+- CI and local failures must be diagnosed and corrected rather than bypassed.
+
+### Suggested Fix
+Identify each failed release audit and the CI-specific failure, apply narrowly scoped fixes, rerun focused checks, then rerun the full release profile and PR workflow before publishing.
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/validate-gse.mjs, scripts/run-validation-profile.mjs, .github/workflows
+
+### Resolution
+- **Resolved**: 2026-07-17T14:18:34Z
+- **Notes**: Repaired final-readiness, close-gate, release-bundle, stale-copy, and completion-readiness contracts; regenerated tracked acceptance artifacts from live evidence; `npm run validate:release` passed 35/35 without bypassing checks.
+
+---
+
+## [ERR-20260717-012] git_bash_temp_path_node_mismatch
+
+**Logged**: 2026-07-17T14:04:00Z
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+A validation report probe wrote to Git Bash `/tmp`, then Windows Node resolved the same literal path as `D:\tmp` and could not read it.
+
+### Error
+```text
+ENOENT: no such file or directory, open 'D:\tmp\gse-standard.json'
+```
+
+### Context
+- Operation attempted: redirect standard validation JSON to `/tmp/gse-standard.json` and parse it in a second Windows Node process.
+- The validation command ran, but the path crossed incompatible Git Bash and Windows Node path semantics.
+
+### Suggested Fix
+Capture child-process stdout directly in one Node process when inspecting JSON reports; do not exchange temporary paths between Git Bash redirection and Windows Node.
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/validate-gse.mjs
+
+### Resolution
+- **Resolved**: 2026-07-17T14:04:00Z
+- **Notes**: Replaced the cross-runtime temporary file with a single-process `spawnSync` capture; standard validation passed 24/24 and exposed the expected `results[]` shape.
+
+### Follow-up Error
+The first focused audit chain stopped after `audit-final-form-stale-copy.mjs` failed FFSC04. The release bundle itself passed 33/33; FFSC04 read obsolete pending-gate fields from tracked acceptance JSON and produced three empty sets. Update the audit to the current schemas while retaining exact comparison with the live three-gate boundary.
 
 ---

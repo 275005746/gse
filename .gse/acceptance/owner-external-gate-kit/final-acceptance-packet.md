@@ -1,6 +1,6 @@
 # GSE Final Acceptance Packet
 
-Generated: 2026-07-09T04:45:20.237Z
+Generated: 2026-07-17T14:08:18.802Z
 Root: <gse-root>
 
 ## Purpose
@@ -10,9 +10,9 @@ Turn the final-readiness matrix into an executable owner/external acceptance che
 ## Current Claim Boundary
 
 - Local readiness: verified
-- Public accepted: verified
-- Verified rows: 23
-- Pending owner/external rows: 0
+- Public accepted: not-accepted
+- Verified rows: 20
+- Pending owner/external rows: 3
 - Optional not-claimed rows: 1
 
 ## Verified Local Capabilities
@@ -35,15 +35,31 @@ Turn the final-readiness matrix into an executable owner/external acceptance che
 - Public security contact record: verified; evidence: record/audit public security contact scripts and template
 - Public security contact: verified; evidence: .gse/releases/public-security-contact-owner-required.md
 - Public channel publication record: verified; evidence: record/audit public channel publication scripts and template
-- Public registry publication: verified; evidence: .gse/releases/public-registry-publication-npm.md
-- Marketplace approval: verified; evidence: .gse/releases/public-channel-publication-pending.md
 - Portable command execution: verified; evidence: run-gse-command and audit-command-execution
 - Host adapters: verified; evidence: command adapter generator and audit
-- Other host runtime invocation: verified; evidence: .gse/evidence/host-invocations/2026-07-07-node-npm-package-runtime.md
 
 ## Pending Acceptance Gates
 
-- No owner/external acceptance gates are pending.
+### Public registry publication
+
+- Status: external-required
+- Current evidence: no public registry publication record is claimed
+- Required action: Attach the real owner/external evidence, then run `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force`. Preflight with `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json`.
+- Acceptance rule: do not mark accepted until the evidence is real, dated, and re-audited.
+
+### Marketplace approval
+
+- Status: external-required
+- Current evidence: references/marketplace-discovery.md
+- Required action: Attach the real owner/external evidence, then run `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type marketplace --channel-name __MARKETPLACE_NAME__ --channel-url __MARKETPLACE_LISTING_URL__ --version __VERSION__ --review-status approved --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __MARKETPLACE_LISTING_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-marketplace-approval true --proves-channel-installability true --evidence-status accepted --force`. Preflight with `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type marketplace --channel-name __MARKETPLACE_NAME__ --channel-url __MARKETPLACE_LISTING_URL__ --version __VERSION__ --review-status approved --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __MARKETPLACE_LISTING_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-marketplace-approval true --proves-channel-installability true --evidence-status accepted --force --dry-run --json`.
+- Acceptance rule: do not mark accepted until the evidence is real, dated, and re-audited.
+
+### Other host runtime invocation
+
+- Status: external-required
+- Current evidence: 0 verified/accepted host record(s), 0 portable text record(s)
+- Required action: Attach the real owner/external evidence, then run `node scripts/record-host-invocation.mjs --root __GSE__ --host __HOST__ --host-version __VERSION_OR_UNKNOWN__ --project gse --adapter-path __HOST_ADAPTER_OR_RUNTIME_ENTRYPOINT__ --invocation-method __HOST_UI_COMMAND_RUNTIME_BRIDGE_PLUGIN_COMMAND_AGENT_COMMAND__ --command "/gse continue" --status accepted --evidence-owner __OWNER__ --evidence __THREAD_TRANSCRIPT_SCREENSHOT_TERMINAL_OUTPUT_OR_HOST_LOG__ --verification-command "node scripts/audit-final-readiness.mjs --root __GSE__ --json" --native-slash-command false --portable-text-command false --generated-pointer false --owner-acceptance-required false --force`. Preflight with `node scripts/record-host-invocation.mjs --root __GSE__ --host __HOST__ --host-version __VERSION_OR_UNKNOWN__ --project gse --adapter-path __HOST_ADAPTER_OR_RUNTIME_ENTRYPOINT__ --invocation-method __HOST_UI_COMMAND_RUNTIME_BRIDGE_PLUGIN_COMMAND_AGENT_COMMAND__ --command "/gse continue" --status accepted --evidence-owner __OWNER__ --evidence __THREAD_TRANSCRIPT_SCREENSHOT_TERMINAL_OUTPUT_OR_HOST_LOG__ --verification-command "node scripts/audit-final-readiness.mjs --root __GSE__ --json" --native-slash-command false --portable-text-command false --generated-pointer false --owner-acceptance-required false --force --dry-run --json`.
+- Acceptance rule: do not mark accepted until the evidence is real, dated, and re-audited.
 
 ## Optional Not-Claimed Rows
 
