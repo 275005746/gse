@@ -517,3 +517,32 @@ Capture child-process stdout directly in one Node process when inspecting JSON r
 The first focused audit chain stopped after `audit-final-form-stale-copy.mjs` failed FFSC04. The release bundle itself passed 33/33; FFSC04 read obsolete pending-gate fields from tracked acceptance JSON and produced three empty sets. Update the audit to the current schemas while retaining exact comparison with the live three-gate boundary.
 
 ---
+
+## [ERR-20260717-013] github_push_network_unreachable
+
+**Logged**: 2026-07-17T14:30:00Z
+**Priority**: high
+**Status**: pending
+**Area**: infra
+
+### Summary
+The release-gate repair commit could not be pushed because the environment could not connect to GitHub over HTTPS.
+
+### Error
+```text
+fatal: unable to access 'https://github.com/275005746/gse.git/': Failed to connect to github.com port 443: Could not connect to server
+```
+
+### Context
+- Operation attempted: push commit `b820f6f` to `origin/gse-core-foundation` and verify the remote branch with `git ls-remote`.
+- Both independent Git operations failed at the network connection layer.
+- The local branch remains one commit ahead of the remote; no remote state was changed.
+
+### Suggested Fix
+Verify outbound HTTPS connectivity to GitHub, then retry the push once connectivity is restored before evaluating PR checks or continuing the release.
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/config
+
+---
