@@ -516,6 +516,11 @@ Capture child-process stdout directly in one Node process when inspecting JSON r
 ### Follow-up Error
 The first focused audit chain stopped after `audit-final-form-stale-copy.mjs` failed FFSC04. The release bundle itself passed 33/33; FFSC04 read obsolete pending-gate fields from tracked acceptance JSON and produced three empty sets. Update the audit to the current schemas while retaining exact comparison with the live three-gate boundary.
 
+### Recurrence
+- **Observed**: 2026-07-18
+- A Lite validation probe repeated the `/tmp` handoff mistake instead of using the documented single-process `spawnSync` capture.
+- Two subsequent `Read` calls also supplied out-of-range offsets (`4800000000000000` and `4800`) before using the correct 480-line offset. Treat Read offsets as literal line counts, never transformed byte positions.
+
 ---
 
 ## [ERR-20260717-014] npm_version_wrong_working_directory
@@ -570,12 +575,44 @@ fatal: unable to access 'https://github.com/275005746/gse.git/': Failed to conne
 - Operation attempted: push commit `b820f6f` to `origin/gse-core-foundation` and verify the remote branch with `git ls-remote`.
 - Both independent Git operations failed at the network connection layer.
 - The local branch remains one commit ahead of the remote; no remote state was changed.
+- On 2026-07-18, HTTPS push failed again for commit `2aa6379` while GitHub API remained available.
+- The first API fallback read Windows working-tree files directly and changed LF-normalized tracked files to CRLF blobs. Remote blob verification detected the mismatch before PR creation.
 
 ### Suggested Fix
-Verify outbound HTTPS connectivity to GitHub, then retry the push once connectivity is restored before evaluating PR checks or continuing the release.
+Verify outbound HTTPS connectivity to GitHub, then retry the push once connectivity is restored. If the Git Data API is required as a fallback, upload bytes from `git show <commit>:<path>` rather than the Windows working tree, and compare every remote blob SHA with `git ls-tree` before claiming success.
 
 ### Metadata
 - Reproducible: yes
 - Related Files: .git/config
+
+---
+
+## [ERR-20260718-001] ci_log_parser_exit_49
+
+**Logged**: 2026-07-18T00:00:00Z
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+The first bounded parser for the persisted GitHub Actions JSON log exited with code 49 and no diagnostic output.
+
+### Error
+```text
+[cc-switch:tool-result-error]Exit code 49
+```
+
+### Context
+- Operation attempted: parse the escaped `stdout` JSON field from the saved CI log with inline Python and Node.js scripts.
+- Python exited with code 49 and no diagnostic output.
+- The first Node.js attempt searched for decoded newlines inside the still-escaped log field, returned no matching line, and then raised `TypeError: Cannot read properties of undefined (reading 'slice')`.
+- The source log remained unchanged and readable.
+
+### Suggested Fix
+Use the repository runtime (Node.js) for the bounded JSON extraction and print only failed audit records.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: scripts/validate-gse.mjs
 
 ---
