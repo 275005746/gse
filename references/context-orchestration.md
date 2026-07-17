@@ -27,7 +27,7 @@ max_retrieval_cycles: 3
 max_parallel_writers: 2
 ```
 
-These budgets protect coordinator headroom. They do not claim lower total token cost.
+These budgets protect coordinator headroom. They do not claim lower total token cost. GSE enforces the 1,500-token estimate for its compact continuation projection; external host tools and agent results remain host-enforced boundaries.
 
 ## Routing
 
@@ -41,6 +41,9 @@ These budgets protect coordinator headroom. They do not claim lower total token 
 - Context rollover continues the same top-level plan unit in a fresh execution context. It is an `internal-only` execution action and must not create a new global task.
 - Reads, searches, probes, tests, reviews, retries, fixes, and evidence collection remain internal execution actions within their owning plan unit.
 - Only a coherent, user-visible top-level plan unit may be marked `global-task-eligible`; routing metadata declares eligibility but does not create or persist a host task.
+- `topLevelPlanUnitId` is stable across repeated continuation. `taskCreationIntent` is `create` only for the selected new slice, `reuse` for work owned by an active slice, and `none` for advisory candidates or unowned internal work.
+- Only the selected next-slice candidate is globally task-eligible. Alternative candidates remain advisory and cannot trigger host task creation.
+- Worker routing is a recommendation, not dispatch evidence. A role or `one-bounded-worker` recommendation remains `not-observed` until the host supplies real dispatch evidence.
 
 ## Context Pack
 ## Tool Output Policy

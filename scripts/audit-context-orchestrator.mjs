@@ -38,6 +38,10 @@ const boundedCheckpoint = run('generate-context-checkpoint.mjs', ['--root', root
 const continueOrange = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--session', files.orange, '--json'])
 const continueRepair = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--invalid-evidence-fixture', '--json'])
 const continueVerified = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json'])
+const continueVerifiedAgain = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json'])
+const compactVerified = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json', '--compact'])
+const runnerCompact = run('run-gse-command.mjs', ['--root', root, '--target', root, '--command', '/gse continue', '--json', '--compact'])
+const cliCompact = run('gse.mjs', ['continue', '--target', root, '--json', '--compact'])
 const checks = []
 const check = (id, label, passed, evidence) => checks.push({ id, label, status: passed ? 'passed' : 'failed', evidence })
 check('CTX01', 'usage below 65 percent is green', reports.green.health === 'green', reports.green)
@@ -81,15 +85,17 @@ check('CTX19', 'ordinary continuation and repair remain internal actions', conti
     orange: continueOrange.data?.compactState?.noGoalMode,
     repair: continueRepair.data?.compactState?.noGoalMode,
   })
-check('CTX20', 'only a coherent next-slice plan unit is globally task eligible', continueVerified.status === 0
+check('CTX20', 'only the selected coherent next-slice plan unit is globally task eligible', continueVerified.status === 0
   && continueVerified.data?.compactState?.noGoalMode?.recommendedAction === 'open-next-slice'
   && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.workClass === 'plan-unit'
   && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.scope === 'top-level'
   && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.visibility === 'user-visible'
   && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.persistence === 'global-task-eligible'
   && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === true
-  && continueVerified.data?.compactState?.noGoalMode?.selectedCandidate?.taskRouting?.globalTaskEligible === true
-  && continueVerified.data?.compactState?.nextSliceCandidates?.every((candidate) => candidate.taskRouting?.globalTaskEligible === true), continueVerified.data?.compactState?.noGoalMode)
+  && continueVerified.data?.compactState?.noGoalMode?.taskRouting?.taskCreationIntent === 'create'
+  && continueVerified.data?.compactState?.noGoalMode?.selectedCandidate?.taskRouting?.selected === true
+  && continueVerified.data?.compactState?.nextSliceCandidates?.filter((candidate) => candidate.taskRouting?.globalTaskEligible).length === 1
+  && continueVerified.data?.compactState?.nextSliceCandidates?.slice(1).every((candidate) => candidate.taskRouting?.taskCreationIntent === 'none'), continueVerified.data?.compactState?.noGoalMode)
 const executionPolicy = continueVerified.data?.compactState?.executionPolicy
 check('CTX21', 'review cycle is bounded and internal-only', executionPolicy?.globalTaskRule === 'top-level-plan-units-only'
   && executionPolicy?.operationalPersistence === 'internal-only'
@@ -114,6 +120,27 @@ check('CTX23', 'policy documents top-level task and bounded review boundaries', 
     review: 'references/review.md',
     router: 'references/review-router.md',
   })
+const firstPlanUnitId = continueVerified.data?.compactState?.noGoalMode?.taskRouting?.topLevelPlanUnitId
+const repeatedPlanUnitId = continueVerifiedAgain.data?.compactState?.noGoalMode?.taskRouting?.topLevelPlanUnitId
+check('CTX24', 'repeated continuation produces stable top-level plan-unit identity', Boolean(firstPlanUnitId) && firstPlanUnitId === repeatedPlanUnitId, { firstPlanUnitId, repeatedPlanUnitId })
+check('CTX25', 'continuation and rollover reuse the active plan unit without creating a task', continueOrange.data?.compactState?.noGoalMode?.taskRouting?.topLevelPlanUnitId === 'fixture-continue'
+  && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.taskCreationIntent === 'reuse'
+  && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === false, continueOrange.data?.compactState?.noGoalMode?.taskRouting)
+check('CTX26', 'worker recommendation is separate from verified dispatch', reports.yellow.workerRouting?.recommendation === 'one-bounded-worker'
+  && reports.yellow.workerRouting?.dispatch?.status === 'not-observed'
+  && reports.yellow.workerRouting?.dispatch?.verified === false, reports.yellow.workerRouting)
+check('CTX27', 'compact continue JSON is bounded and excludes full diagnostics', compactVerified.status === 0
+  && compactVerified.data?.outputProfile === 'compact'
+  && compactVerified.data?.outputBudget?.withinBudget === true
+  && compactVerified.data?.outputBudget?.estimatedTokens <= compactVerified.data?.outputBudget?.maxEstimatedTokens
+  && !Object.hasOwn(compactVerified.data || {}, 'compactState')
+  && !Object.hasOwn(compactVerified.data || {}, 'preflight'), compactVerified.data)
+check('CTX28', 'runner and CLI propagate compact output without nested stdout', runnerCompact.status === 0
+  && cliCompact.status === 0
+  && runnerCompact.data?.outputProfile === 'compact'
+  && cliCompact.data?.outputProfile === 'compact'
+  && !Object.hasOwn(runnerCompact.data || {}, 'execution')
+  && !Object.hasOwn(cliCompact.data || {}, 'execution'), { runner: runnerCompact.data, cli: cliCompact.data })
 const failed = checks.filter((item) => item.status === 'failed').length
 const report = { root, generatedAt: new Date().toISOString(), summary: { status: failed ? 'failed' : 'passed', passed: checks.length - failed, failed, total: checks.length }, workflows: { contextOrchestrator: failed ? 'incomplete' : 'verified' }, checks, limits: ['Fixture routing does not create a host task or prove real subagent execution.'] }
 fs.rmSync(fixture, { recursive: true, force: true })

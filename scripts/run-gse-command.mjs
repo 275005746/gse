@@ -301,6 +301,7 @@ if (execute && verb === 'init') {
   }
 } else if (verb === 'build' || verb === 'continue' || verb === 'next') {
   const continueArgs = ['--root', root, '--target', target, '--json']
+  if (compactOutput) continueArgs.push('--compact')
   if (rest.includes('--brief')) continueArgs.push('--brief')
   if (rest.includes('--doctor') || rest.includes('--full')) continueArgs.push('--doctor')
   const profileIndex = rest.indexOf('--profile')

@@ -52,7 +52,7 @@ Required artifacts:
 - Review and evidence
 - Learning review after completion
 
-Use change packs, subagents, CI gates, browser automation, and ADRs when available and verified.
+Use change packs, CI gates, browser automation, and ADRs when relevant and verified. Use real subagents only for bounded, independent work with explicit ownership and clear parallel benefit; Enterprise level and multiple role responsibilities do not by themselves require dispatch.
 
 Gate profile:
 

@@ -60,7 +60,9 @@ Checks release, CI, package, public, owner, marketplace, registry, and host-runt
 
 Use `references/stage-orchestrator.md` to select accountable roles for the current stage. Worker output remains provisional until that stage's evidence gate passes.
 
-- Use real subagent tools only when exposed by the current host.
+- Use real subagent tools only when exposed by the current host and when the work is bounded, independent, and benefits clearly from parallel execution.
+- A role assignment or worker recommendation is not proof of dispatch. Keep dispatch status unverified until the host records real execution evidence.
+- Repeated continuation reuses the owning `topLevelPlanUnitId`; it does not create another task for the same plan unit.
 - Give each agent a role, files allowed, expected output, and forbidden actions. Use `assets/templates/dispatch-packet.md` when the assignment needs durable boundaries or evidence.
 - For portable fallback packets, use `references/role-dispatch-fallback.md` and `assets/templates/role-fallback-packet.md`.
 - Avoid parallel writes to the same files.

@@ -1,220 +1,89 @@
 # GSE
 
-[English](https://github.com/275005746/gse/blob/main/README.md) | 简体中文
+[English](README.md) | 简体中文
 
-面向长期 agent 辅助软件项目的 Goal-Spec-Evidence Engineering。
+**面向长期 AI 辅助软件开发的 Goal-Spec-Evidence Engineering。**
 
-GSE 给 coding agent 和团队一个很小的项目工作区，用来保存目标、规格、执行说明、证据和交接信息。它让下一步更清楚，让验证贴近代码，让后续会话更容易接上。
-
-它适合 agentic engineering、spec-driven development、SDD 风格的项目推进，也适合需要证据闭环的 AI coding agent 工作流。
+GSE 是 coding agent 的工程控制层。它把产品目标、当前实现切片、验证证据和下一步动作保存在项目本地的小型工作区中，让项目可以跨会话持续推进，而不是依赖越来越长的聊天记录。
 
 ```text
 Goal -> Spec -> Execute -> Evidence -> Learn
 ```
 
-## 亮点
+GSE 不替代 Claude Code、Codex 或其他 coding host。它为现有宿主提供可迁移的工程工作方式、机器可读状态、聚焦验证路径，以及诚实的证据边界。
 
-- 项目本地 `.gse/` 工作区，用来保存长期工程上下文
-- 目标地图、变更规格、质量门、证据日志和交接记录
-- `lite`、`standard`、`enterprise` 三种脚手架，适配不同规模项目
-- 面向 Codex、Claude Code、Hermes-style runtimes、WorkBuddy 等 host 的可迁移 `/gse ...` 命令语义
-- 面向日常开发和发布检查的 focused validation profiles
-- 可选 host folders、LSP、MCP、hooks、plugins、project skills 适配说明
-- 面向成熟项目的 release、packaging、public collaboration 和 evidence gate 工作流
+GSE 由 [GateHub](https://gatehub.top/) 官方维护。GateHub 同时提供 AI 模型中转服务，为使用 GSE 的开发者和团队提供模型接入与项目支持。
 
-## 安装
+## 为什么需要 GSE
 
-从 npm 安装：
+Agent 辅助开发经常在这些地方失控：
 
-```bash
-npm install -g @t275005746/gse
-gse status --target .
-```
+- 需求和决策埋进长对话，下一次会话无法可靠接续；
+- 结果和验收标准还没说清楚，agent 就开始实现；
+- 每次继续都重复创建任务或重新扫描仓库；
+- 大段日志和嵌套报告不断消耗协调者上下文；
+- “建议派一个 worker”被误报成“已经派发了 worker”；
+- “命令执行过”被直接描述成“功能已经完成”；
+- 本地检查通过，被扩大成 CI、市场、注册表或生产环境已经接受。
 
-从已检出的 GSE 副本直接使用：
+GSE 通过持久化工程意图、一次只选择一个有边界的顶层计划单元、分离执行与证据，并对外部门禁保持未验收状态，解决这些问题。
 
-```bash
-node scripts/validate-gse.mjs --root . --json
-```
+## GSE 提供什么
 
-把已检出的副本打包给其他环境：
+### 持久化项目上下文
 
-```bash
-node scripts/package-gse.mjs --root . --out <package-dir> --label <release-label>
-```
+GSE 创建 `.gse/` 工作区，用来保存：
 
-从本地包安装：
+- 当前目标和活动切片；
+- 项目真实命令、工程标准和约束；
+- 变更规格与验收条件；
+- 聚焦质量门；
+- 证据记录、交接、风险和下一步动作。
 
-```bash
-node scripts/install-gse.mjs --source <package-dir> --target <install-skill-dir>
-```
+这个工作区面向未来会话和不同 agent host。它补充已有路线图、架构文档和 issue 系统，而不是强迫项目迁移或复制它们。
 
-从 URL 形式的包源安装：
+### 按风险伸缩的工作流
 
-```bash
-node scripts/install-gse.mjs --source-url <file-or-http-package-url> --target <install-skill-dir>
-```
+GSE 让小任务保持轻量，只在风险确实需要时增加控制。
 
-发布包、签名和信任记录见 `references/packaging.md`。
-
-## 快速开始
-
-给项目初始化 GSE：
-
-```bash
-node scripts/init-project.mjs --target <project-root>
-```
-
-如果已经知道项目形态，可以直接指定模式：
-
-```bash
-node scripts/init-project.mjs --target <project-root> --mode lite
-node scripts/init-project.mjs --target <project-root> --mode standard
-node scripts/init-project.mjs --target <project-root> --mode enterprise
-```
-
-只读检查项目画像：
-
-```bash
-node scripts/discover-project-profile.mjs --target <project-root> --json
-```
-
-验证 GSE 包：
-
-```bash
-node scripts/validate-gse.mjs --root . --json
-```
-
-发布或交接前检查 Node package metadata：
-
-```bash
-node scripts/audit-npm-package-metadata.mjs --root . --json
-node scripts/audit-npm-tarball-install.mjs --root . --json
-node scripts/audit-npm-publish-dry-run.mjs --root . --json
-npm pack --dry-run --json
-```
-
-## 什么时候用 GSE
-
-适合这些情况：
-
-- 项目会跨很多 agent 会话持续推进，
-- 需求和决策开始埋在聊天历史里，
-- 每次变更都需要清楚的范围和验收方式，
-- 多个 agents、workers、tools 或 model routes 会碰同一个项目，
-- 希望先有证据，再说完成。
-
-小型一次性任务可以走最轻路径。产品、runtime、平台或开源发布可以启用更严格的质量门。
-
-## 工作方式
-
-GSE 始终让五件事可见：
-
-| 步骤 | 作用 |
-|---|---|
-| Goal | 记录北极星、当前焦点、风险和下一刀。 |
-| Spec | 在实现漂移前定义当前变更。 |
-| Execute | 按项目规则和现有代码模式执行。 |
-| Evidence | 用 focused tests、API smokes、browser smokes、review 或结构检查证明结果。 |
-| Learn | 记录可复用经验，把重复问题提升为质量门或模板。 |
-
-流程按风险伸缩：小变更保持轻量；共享行为、发布、安全敏感和跨 host 声明走更严格的验证。
-
-## 会创建什么
-
-GSE 会在目标项目里创建一个可迁移的 `.gse/` 工作区。
-
-| 模式 | 创建内容 | 适合场景 |
+| 等级 | 适用场景 | 典型证明 |
 |---|---|---|
-| `lite` | 目标地图、项目画像、质量门、工具说明、证据日志、变更模板 | 小项目、低风险任务、首次接入 |
-| `standard` | 包含 `lite`，并增加 agent 角色、派发说明、项目 skills、LSP/index 说明 | 会持续由 agent 接续开发的项目 |
-| `enterprise` | 包含 `standard`，并增加 hooks、MCP、plugins、release、incident review、audit、host adapters | 大型项目、多 host、runtime 集成、治理 |
-| `auto` | 根据项目线索选择保守脚手架 | 希望 GSE 自动选择时 |
+| `lite` | 小修复、脚本、文档、窄范围重构 | 一个聚焦检查或直接证据 |
+| `standard` | 用户可见功能、API 或状态变更、跨文件行为 | 聚焦测试，并在需要时补一个集成、API 或 UI smoke |
+| `enterprise` | 安全、迁移、公开契约、发布、架构、长期协调 | 风险对应的硬门禁、评审、回滚和验收证据 |
 
-大项目第一次接入也可以直接使用 `standard` 或 `enterprise`。
+选 `enterprise` 不是为了把流程搞复杂。普通改动仍然只做必要检查；遇到发布、安全、迁移等高风险工作时，再增加评审、回滚和硬门禁。
 
-## 项目结构
+### 稳定的任务路由
 
-典型工作区：
+GSE 区分**顶层计划单元**和完成它所需的内部执行动作。
 
-```text
-.gse/
-  README.md
-  project-profile.md
-  goal-map.md
-  goals/
-  quality-gates.md
-  tooling.md
-  changes/
-  evidence/
-  templates/
-```
+- 选中的新切片拥有稳定的 `topLevelPlanUnitId`，并报告 `taskCreationIntent: create`。
+- 重复继续同一个活动切片时报告 `taskCreationIntent: reuse`。
+- 读取、搜索、测试、评审、重试、修复、证据收集和上下文接续都属于内部动作。
+- 未选中的候选切片只是建议，不能独立触发宿主创建任务。
 
-`standard` 和 `enterprise` 项目还可能包含：
+因此，重复执行 `gse continue` 在计划边界上是幂等的；真正的新工作仍然可以正常创建任务。
 
-```text
-.gse/
-  agents/
-  skills/
-  lsp/
-  hooks/
-  mcp/
-  plugins/
-  release.md
-  incident-review.md
-  audit.md
-```
+### 有预算的上下文与 compact 继续包
 
-`.gse/goal-map.md` 是短索引。模块级详情放在 `.gse/goals/`。已有产品路线图、架构文档和项目规则可以继续留在原位置，由 GSE 指向它们，不需要搬进 `.gse/`。
-
-## 命令
-
-GSE 定义了一组可迁移命令语义，能读取这个 skill 的 agent 可以按这些命令执行：
-
-```text
-/gse help
-/gse init
-/gse adopt
-/gse continue
-/gse stage
-/gse status
-/gse doctor
-/gse acceptance
-/gse owner-actions
-/gse probe
-/gse release
-/gse package
-/gse install
-/gse public-release
-/gse change
-/gse slice
-/gse verify
-/gse learn
-/gse audit
-/gse close
-```
-
-`/gse close` 是只读的收口就绪检查。需要在证据存在后归档某个 change pack 时，使用 `scripts/close-change.mjs`。
-
-可迁移 runner：
+长会话可以请求精简的机器可读继续包：
 
 ```bash
-node scripts/gse.mjs continue --target <project-root>
-node scripts/run-gse-command.mjs --target <project-root> --command "/gse continue"
-node scripts/run-gse-command.mjs --target <project-root> --command "/gse stage <intent>"
-node scripts/run-gse-command.mjs --target <project-root> --command "/gse learn --summary <lesson>" --execute --json
+gse continue --target . --json --compact
 ```
 
-验证 profile：
+Compact 输出只保留活动切片、任务路由意图、选中候选、第一步、聚焦命令、上下文健康、worker 建议、风险和有界 prompt，并报告估算输出预算。它不会再把完整子报告嵌套进外层 JSON。
 
-```bash
-node scripts/run-validation-profile.mjs --target <project-root> --profile lite
-node scripts/run-validation-profile.mjs --target <project-root> --profile standard
-node scripts/run-validation-profile.mjs --target <project-root> --profile enterprise
-node scripts/run-validation-profile.mjs --target <project-root> --profile release
-```
+GSE 可以约束自己生成的数据包，但无法保证宿主隐藏上下文、外部工具或独立 agent 的总 token 消耗。
 
-## 证据模型
+### 受控的多 agent 协作
+
+GSE 定义协调者、规划者、定位者、实现者、验证者、评审者、QA、证据和发布等职责。这些是责任边界，不代表真实子代理已经启动。
+
+只有当工作有明确边界、相互独立、文件归属清楚，而且并行确实有收益时，GSE 才建议派发 worker。在宿主提供真实执行证据之前，dispatch 状态保持 `not-observed`。如果宿主没有子代理能力，同样的角色可以由主会话顺序执行。
+
+### 先有证据，再说完成
 
 GSE 使用三层证据：
 
@@ -222,24 +91,195 @@ GSE 使用三层证据：
 result -> verified -> accepted
 ```
 
-- `result`：产物存在，或者命令已经执行。
-- `verified`：focused checks 证明当前环境里的行为有效。
-- `accepted`：项目 owner、策略、CI gate、release gate、review gate 或产品验收门接受 verified 结果。
+- `result`：产物存在，或者命令执行过；
+- `verified`：聚焦检查证明当前环境中的行为有效；
+- `accepted`：owner、CI、评审、发布、产品或外部系统接受了 verified 结果。
 
-这样日常产品切片可以保持快速，发布、安全和跨 host 声明也能被追踪和审计。
+本地成功不能被静默扩大成公开发布、生产、市场、注册表或跨 host 已经验收。
 
-## 文档
+## 快速开始
 
-- `SKILL.md`：agent 入口和路由规则
-- `references/`：工作流说明和更深的运行文档
-- `scripts/`：项目初始化、验证、发布和审计 helper
-- `assets/templates/`：可复用记录和交接模板
-- `README.md`：英文 README
+### 从 npm 安装
 
-## 社区
+```bash
+npm install -g @t275005746/gse
+gse status --target .
+```
 
-GateHub（[gatehub.top](https://gatehub.top/)）支持 GSE 的开发和贡献者协作。
+需要 Node.js 18 或更高版本。
+
+### 初始化项目
+
+```bash
+gse init --target .
+```
+
+GSE 默认保守地自动选择模式，也可以显式指定：
+
+```bash
+node scripts/init-project.mjs --target . --mode lite
+node scripts/init-project.mjs --target . --mode standard
+node scripts/init-project.mjs --target . --mode enterprise
+```
+
+初始化是增量式的。已有产品、架构和工程文档继续保留在原位置。
+
+### 查看当前状态
+
+```bash
+gse status --target . --json
+```
+
+### 继续当前工作
+
+```bash
+gse continue --target .
+gse continue --target . --json --compact
+```
+
+### 执行聚焦验证
+
+```bash
+node scripts/run-validation-profile.mjs --target . --profile lite
+```
+
+只有当变更或声明确实需要时，才升级到 `standard`、`enterprise` 或 `release`。
+
+## 典型工作流
+
+1. **Discover**：识别项目真实命令、当前状态和未解决风险。
+2. **Select**：选择一个连贯结果作为活动计划单元。
+3. **Specify**：按风险明确范围、验收、证据和停止条件。
+4. **Execute**：完成能证明结果的最小实现切片。
+5. **Verify**：运行覆盖变更行为的最窄检查。
+6. **Review**：只在风险要求的边界进行评审。
+7. **Record evidence**：记录证据，然后收口、修复或选择下一切片。
+8. **Learn**：提取可复用经验，但不把每个问题都变成更多流程。
+
+一次正常的继续应该始终回答：
+
+```text
+Outcome:
+Scope:
+Acceptance:
+Evidence:
+Next action:
+```
+
+## 项目工作区
+
+典型项目从这些文件开始：
+
+```text
+.gse/
+  README.md
+  state.json
+  project-profile.md
+  goal-map.md
+  quality-gates.md
+  changes/
+  evidence/
+  handoffs/
+  templates/
+```
+
+不是每个项目都需要所有文件。GSE 脚手架会按项目规模降级，也不应该覆盖成熟仓库已有的工程约定。
+
+## 常用命令
+
+常见 CLI 路径：
+
+```bash
+gse status --target .
+gse continue --target .
+gse continue --target . --json --compact
+gse stage --target . --intent "交付下一个已验证切片"
+gse doctor --target .
+gse acceptance --target .
+gse close --target .
+```
+
+把 GSE 作为 Skill 调用的宿主也可以使用可迁移命令语义：
+
+```text
+/gse init       /gse adopt      /gse continue
+/gse stage      /gse status     /gse doctor
+/gse change     /gse verify     /gse acceptance
+/gse learn      /gse audit      /gse close
+/gse package    /gse install    /gse release
+```
+
+`close` 是收口就绪检查，不是伪造证据或绕过失败门禁的许可。
+
+完整命令和脚本索引见 [`references/commands.md`](references/commands.md) 与 [`references/script-index.md`](references/script-index.md)。
+
+## 诚实的能力边界
+
+GSE 可以：
+
+- 保存项目本地的工程上下文；
+- 按风险和当前阶段路由工作；
+- 生成稳定的任务路由元数据；
+- 约束自己的 compact 继续输出；
+- 准备 worker packet 和角色分工；
+- 执行本地审计并记录证据；
+- 识别缺失的 owner 或外部验收。
+
+GSE 自己不能：
+
+- 强制宿主正确创建、复用或派发任务；
+- 在没有宿主证据时证明子代理真实运行过；
+- 压缩宿主私有的实时会话状态；
+- 保证模型和工具的总 token 消耗；
+- 替代 owner、CI、注册表、市场或生产证据；
+- 把本地 verified 自动变成外部 accepted。
+
+这些边界是工程模型的一部分，不是应该被成功文案掩盖的缺陷。
+
+## 什么时候适合使用 GSE
+
+这些情况适合 GSE：
+
+- 项目会跨很多 agent 会话持续推进；
+- 多个 agent、模型、工具或人类贡献者共享工作；
+- 变更需要明确范围和验收条件；
+- 发布、公开契约、安全或迁移需要可审计证据；
+- 上下文成本和重复编排开始难以控制；
+- 希望 agent 明确区分已验证事实和仍待证明的声明。
+
+对于一行修改或一次性实验，应走最轻路径，甚至完全不创建脚手架。
+
+## 文档入口
+
+- [`SKILL.md`](SKILL.md)：agent 入口和路由规则
+- [`references/operating-model.md`](references/operating-model.md)：核心运行模型
+- [`references/task-levels.md`](references/task-levels.md)：按风险伸缩的任务等级
+- [`references/context-orchestration.md`](references/context-orchestration.md)：上下文预算和任务复用
+- [`references/agent-roles.md`](references/agent-roles.md)：角色与派发边界
+- [`references/quality-gates.md`](references/quality-gates.md)：验证和完成门禁
+- [`references/release.md`](references/release.md)：发布流程与声明边界
+
+## 打包与开发
+
+验证已检出的副本：
+
+```bash
+node scripts/validate-gse.mjs --root . --profile lite --json
+```
+
+打包并安装本地副本：
+
+```bash
+node scripts/package-gse.mjs --root . --out <package-dir> --label <release-label>
+node scripts/install-gse.mjs --source <package-dir> --target <skill-dir>
+```
+
+发布包、完整性清单、签名和信任记录见 [`references/packaging.md`](references/packaging.md)。
+
+## 官方服务
+
+[GateHub](https://gatehub.top/) 是 GSE 的官方维护与支持平台，并提供 AI 模型中转服务。你可以通过 GateHub 获取模型接入、GSE 使用支持和项目协作服务。
 
 ## License
 
-MIT。见 `LICENSE`。
+MIT。见 [`LICENSE`](LICENSE)。

@@ -20,14 +20,38 @@ const maxHealth = (...values) => values.reduce((best, value) => RANK[value] > RA
 const usageHealth = (percent) => percent >= 90 ? 'red' : percent >= 80 ? 'orange' : percent >= 65 ? 'yellow' : 'green'
 const compactionHealth = (count) => count >= 3 ? 'red' : count >= 2 ? 'orange' : count >= 1 ? 'yellow' : 'green'
 
-export function internalTaskRouting(actionKind) {
+export function internalTaskRouting(actionKind, topLevelPlanUnitId = null) {
   return {
     workClass: 'execution-action',
     scope: 'operational',
     visibility: 'internal',
     persistence: 'internal-only',
     globalTaskEligible: false,
+    topLevelPlanUnitId,
+    taskCreationIntent: topLevelPlanUnitId ? 'reuse' : 'none',
+    selected: false,
     actionKind,
+  }
+}
+
+function workerRoutingFor(health) {
+  const recommendation = health === 'yellow'
+    ? 'one-bounded-worker'
+    : health === 'unavailable'
+      ? 'sequential-fallback'
+      : 'coordinator'
+  return {
+    recommendation,
+    conditions: recommendation === 'one-bounded-worker'
+      ? ['work is bounded and independent', 'files and expected output are explicit', 'parallel execution has clear benefit']
+      : recommendation === 'sequential-fallback'
+        ? ['host dispatch capability is unavailable or unverified']
+        : ['keep ownership in the coordinator'],
+    dispatch: {
+      status: 'not-observed',
+      verified: false,
+      evidence: null,
+    },
   }
 }
 
@@ -54,6 +78,7 @@ export function classifyContextHealth({ usedTokens = null, contextWindow = null,
     canExpandScope,
     outputMode,
     agentRoute,
+    workerRouting: workerRoutingFor(health),
     checkpointRequired: rolloverRequired,
     rolloverRequired,
     taskRouting: internalTaskRouting(rolloverRequired ? 'context-rollover' : 'continue-current-slice'),

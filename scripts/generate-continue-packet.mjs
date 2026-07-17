@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -14,7 +15,7 @@ import { readHostCapabilities } from './audit-host-capabilities.mjs'
 import { auditToolFallbackPolicy } from './audit-tool-fallback-policy.mjs'
 import { findCanonicalGoalSource } from './canonical-goal-source.mjs'
 import { analyzeCanonicalGoalSourceHygiene } from './document-hygiene.mjs'
-import { internalTaskRouting } from './context-health.mjs'
+import { CONTEXT_BUDGETS, internalTaskRouting } from './context-health.mjs'
 
 const args = process.argv.slice(2)
 
@@ -30,7 +31,7 @@ const contextSessionPath = readArg('--session')
 const contextSessionId = readArg('--session-id')
 const jsonOnly = args.includes('--json')
 const selfTest = args.includes('--self-test') || !targetArg
-const outputProfile = args.includes('--brief')
+const outputProfile = args.includes('--compact') || args.includes('--brief')
   ? 'brief'
   : args.includes('--doctor') || args.includes('--full')
     ? 'doctor'
@@ -681,13 +682,24 @@ function buildNextSliceMode(state) {
   }
 }
 
-function planUnitTaskRouting() {
+function stablePlanUnitId(projectName, candidate) {
+  const semanticKey = [projectName, candidate.kind, candidate.source, candidate.outcomeHint || candidate.title]
+    .map((value) => String(value || '').replace(/\\/g, '/').replace(/\s+/g, ' ').trim().toLowerCase())
+    .join('|')
+  return `plan-${crypto.createHash('sha256').update(semanticKey).digest('hex').slice(0, 16)}`
+}
+
+function planUnitTaskRouting(topLevelPlanUnitId, { selected = false, taskCreationIntent = 'none' } = {}) {
+  const globalTaskEligible = selected && taskCreationIntent === 'create'
   return {
     workClass: 'plan-unit',
     scope: 'top-level',
     visibility: 'user-visible',
-    persistence: 'global-task-eligible',
-    globalTaskEligible: true,
+    persistence: globalTaskEligible ? 'global-task-eligible' : 'advisory-only',
+    globalTaskEligible,
+    topLevelPlanUnitId,
+    taskCreationIntent,
+    selected,
     actionKind: null,
   }
 }
@@ -1035,7 +1047,7 @@ function buildCandidateActionPacket(candidate) {
   return base
 }
 
-function buildNextSliceCandidates(target, state, nextSliceMode, productProgressDrift = null, productOutcomeGate = null) {
+function buildNextSliceCandidates(target, state, nextSliceMode, productProgressDrift = null, productOutcomeGate = null, projectName = 'project') {
   if (nextSliceMode.action !== 'open-next-slice') return []
 
   const roadmapText = readText(path.join(target, 'references', 'final-form-roadmap.md'))
@@ -1153,17 +1165,25 @@ function buildNextSliceCandidates(target, state, nextSliceMode, productProgressD
 
   return uniqueCandidateReasons(candidates)
     .slice(0, 3)
-    .map((candidate, index) => ({
-      id: `NEXT-${String(index + 1).padStart(3, '0')}`,
-      title: candidate.title,
-      source: candidate.source,
-      reason: shortText(candidate.fullReason),
-      fullReason: candidate.fullReason,
-      acceptanceHint: candidate.acceptanceHint,
-      actionPacket: buildCandidateActionPacket(candidate),
-      suggestedProfile: candidate.suggestedProfile,
-      taskRouting: planUnitTaskRouting(),
-    }))
+    .map((candidate, index) => {
+      const selected = index === 0 && nextSliceMode.action === 'open-next-slice'
+      const topLevelPlanUnitId = stablePlanUnitId(projectName, candidate)
+      return {
+        id: `NEXT-${String(index + 1).padStart(3, '0')}`,
+        topLevelPlanUnitId,
+        title: candidate.title,
+        source: candidate.source,
+        reason: shortText(candidate.fullReason),
+        fullReason: candidate.fullReason,
+        acceptanceHint: candidate.acceptanceHint,
+        actionPacket: buildCandidateActionPacket(candidate),
+        suggestedProfile: candidate.suggestedProfile,
+        taskRouting: planUnitTaskRouting(topLevelPlanUnitId, {
+          selected,
+          taskCreationIntent: selected ? 'create' : 'none',
+        }),
+      }
+    })
 }
 
 function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks, blockedGates }) {
@@ -1218,9 +1238,10 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
     'collect-claim-evidence': 'claim-evidence',
     'continue-current-slice': 'continue-current-slice',
   }[recommendedAction]
+  const activePlanUnitId = compactState.currentSlice?.id || null
   const taskRouting = recommendedAction === 'open-next-slice'
-    ? planUnitTaskRouting()
-    : internalTaskRouting(routingActionKind)
+    ? firstCandidate.taskRouting
+    : internalTaskRouting(routingActionKind, activePlanUnitId)
 
   return {
     mode: 'no-goal-mode',
@@ -1232,6 +1253,7 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
     selectedCandidate: shouldOpenNextSlice
       ? {
           id: firstCandidate.id,
+          topLevelPlanUnitId: firstCandidate.topLevelPlanUnitId,
           title: firstCandidate.title,
           source: firstCandidate.source,
           reason: firstCandidate.reason,
@@ -1637,7 +1659,7 @@ async function buildContinuePacket(target) {
   const completionPlan = buildCompletionPlan(resolvedTarget, state, maintenanceSnapshot)
   const gateTaxonomy = buildGateTaxonomy(blockedGates)
   const nextSliceMode = buildNextSliceMode(state)
-  const nextSliceCandidates = buildNextSliceCandidates(resolvedTarget, state, nextSliceMode, productProgressDrift, productOutcomeGate)
+  const nextSliceCandidates = buildNextSliceCandidates(resolvedTarget, state, nextSliceMode, productProgressDrift, productOutcomeGate, projectName)
   const nextChecks = [
     'node scripts/run-gse-command.mjs --target <project-root> --command "/gse doctor" --json',
     ...completionPlan.requiredCloseCommands,
@@ -1835,6 +1857,68 @@ async function buildContinuePacket(target) {
   }
 }
 
+function compactCheck(item) {
+  return {
+    id: item.id,
+    status: item.status,
+    label: shortText(item.label, 120),
+    recommendation: shortText(item.recommendation, 180) || null,
+  }
+}
+
+function buildCompactJson(report) {
+  const noGoalMode = report.compactState.noGoalMode
+  const compact = {
+    target: report.target,
+    generatedAt: report.generatedAt,
+    outputProfile: 'compact',
+    status: report.summary.status,
+    currentSlice: report.compactState.currentSlice,
+    taskRouting: noGoalMode.taskRouting,
+    recommendedAction: noGoalMode.recommendedAction,
+    selectedCandidate: noGoalMode.selectedCandidate
+      ? {
+          id: noGoalMode.selectedCandidate.id,
+          topLevelPlanUnitId: noGoalMode.selectedCandidate.topLevelPlanUnitId,
+          title: shortText(noGoalMode.selectedCandidate.title, 120),
+          reason: shortText(noGoalMode.selectedCandidate.reason, 180),
+          suggestedProfile: noGoalMode.selectedCandidate.suggestedProfile,
+          taskRouting: noGoalMode.selectedCandidate.taskRouting,
+        }
+      : null,
+    firstSteps: noGoalMode.firstSteps.slice(0, 3).map((item) => shortText(item, 200)),
+    closeCommands: noGoalMode.closeCommands.slice(0, 6),
+    contextHealth: {
+      health: report.compactState.contextHealth.health,
+      action: report.compactState.contextHealth.action,
+      canExpandScope: report.compactState.contextHealth.canExpandScope,
+      outputMode: report.compactState.contextHealth.outputMode,
+      workerRouting: report.compactState.contextHealth.workerRouting,
+    },
+    failures: report.preflight.failures.slice(0, 4).map(compactCheck),
+    warnings: report.preflight.warnings.slice(0, 4).map(compactCheck),
+    topRisks: report.compactState.topRisks.slice(0, 3).map((item) => shortText(item, 180)),
+    prompt: shortText(report.prompt, 1200),
+  }
+  const budget = CONTEXT_BUDGETS.maxToolOutputTokens
+  const initialTokens = Math.ceil(JSON.stringify(compact).length / 4)
+  if (initialTokens > budget) {
+    compact.closeCommands = compact.closeCommands.slice(0, 3)
+    compact.failures = compact.failures.slice(0, 2)
+    compact.warnings = compact.warnings.slice(0, 2)
+    compact.topRisks = compact.topRisks.slice(0, 2)
+    compact.prompt = shortText(compact.prompt, 600)
+  }
+  const estimatedTokens = Math.ceil(JSON.stringify(compact).length / 4)
+  compact.outputBudget = {
+    maxEstimatedTokens: budget,
+    estimatedTokens,
+    withinBudget: estimatedTokens <= budget,
+    truncated: initialTokens > budget,
+  }
+  return compact
+}
+
 function renderMarkdown(report) {
   if (report.outputProfile === 'brief') return renderBriefMarkdown(report)
   if (report.outputProfile === 'doctor') return renderDoctorMarkdown(report)
@@ -1961,7 +2045,7 @@ const report = await buildContinuePacket(target)
 
 if (selfTest) fs.rmSync(target, { recursive: true, force: true })
 
-if (jsonOnly) console.log(JSON.stringify(report, null, 2))
+if (jsonOnly) console.log(JSON.stringify(outputProfile === 'brief' ? buildCompactJson(report) : report, null, 2))
 else console.log(renderMarkdown(report))
 
 if (report.preflight.status === 'failed') process.exit(1)
