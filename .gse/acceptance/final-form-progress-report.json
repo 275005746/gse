@@ -1,34 +1,25 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-17T14:08:15.981Z",
+  "generatedAt": "2026-07-18T19:15:55.893Z",
   "root": "<gse-root>",
   "status": "release-evidence-pending",
   "scores": {
     "localEngineeringReadiness": 100,
-    "fullFinalFormReadiness": 83,
+    "fullFinalFormReadiness": 88,
     "scoringBasis": "local engineering excludes owner-required and external-required rows; full final-form counts every readiness row"
   },
   "readiness": {
     "totalRows": 24,
-    "localRows": 20,
-    "verifiedRows": 20,
+    "localRows": 21,
+    "verifiedRows": 21,
     "acceptedRows": 0,
     "ownerRequiredRows": 0,
-    "externalRequiredRows": 3,
+    "externalRequiredRows": 2,
     "notClaimedRows": 1,
     "publicAccepted": "not-accepted",
-    "pendingGateCount": 3
+    "pendingGateCount": 2
   },
   "pendingReleaseEvidence": [
-    {
-      "area": "Public registry publication",
-      "status": "external-required",
-      "owner": "external registry",
-      "evidence": "no public registry publication record is claimed",
-      "recordCommand": "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force",
-      "preflightCommand": "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json",
-      "requiredEvidence": "Real registry package URL, version, digest, publication date, verification command, and accepted evidence."
-    },
     {
       "area": "Marketplace approval",
       "status": "external-required",
@@ -67,7 +58,7 @@
     {
       "area": "npm tarball install",
       "status": "verified",
-      "evidence": "scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed bin execution, and installed README audit"
+      "evidence": "scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed help/init/status execution, and installed README audit"
     },
     {
       "area": "npm publish dry-run",
@@ -138,6 +129,11 @@
       "area": "Public channel publication record",
       "status": "verified",
       "evidence": "record/audit public channel publication scripts and template"
+    },
+    {
+      "area": "Public registry publication",
+      "status": "verified",
+      "evidence": ".gse/releases/public-registry-publication-npm.md"
     },
     {
       "area": "Portable command execution",

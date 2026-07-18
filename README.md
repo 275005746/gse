@@ -2,161 +2,118 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**Goal-Spec-Evidence Engineering for long-running AI-assisted software development.**
+**Goal-Spec-Evidence Engineering for long-running AI coding work across sessions.**
 
-GSE is an engineering control layer for coding agents. It keeps product intent, the current implementation slice, verification evidence, and the next action in a small project-local workspace so work can continue across sessions without relying on chat history.
+GSE is a portable Agent Skill and CLI. It stores the active Goal projection, current functional Slice, acceptance contract, evidence, risks, and next action in the repository so a new agent can resume without the previous chat.
 
 ```text
 Goal -> Spec -> Execute -> Evidence -> Learn
 ```
 
-GSE does not replace Claude Code, Codex, or another coding host. It gives the host a portable operating model, machine-readable state, focused validation routes, and honest evidence boundaries.
-
-GSE is officially maintained by [GateHub](https://gatehub.top/). GateHub also provides an AI model relay service, model access, and project support for developers and teams using GSE.
+GSE does not replace Claude Code, Codex, Hermes, or another host. The host owns its Goal, turn, task, worker, and approval lifecycle. GSE supplies the portable engineering contract underneath that lifecycle.
 
 ## Why GSE
 
-Agent-assisted development becomes unreliable when:
-
-- requirements and decisions disappear into long conversations;
-- the agent starts implementing before the outcome and acceptance criteria are clear;
-- every continuation creates another task or repeats repository discovery;
-- large logs and nested reports consume the coordinator context;
-- a recommended worker is mistaken for a worker that was actually dispatched;
-- “the command ran” is reported as “the feature is complete”;
-- local checks are used to claim CI, marketplace, registry, or production acceptance.
-
-GSE addresses these problems by keeping durable intent in the repository, selecting one bounded plan unit at a time, separating execution from evidence, and making external claims remain unaccepted until real external evidence exists.
-
-## What GSE Provides
-
-### Durable project context
-
-GSE creates a `.gse/` workspace that can hold:
-
-- the current goal and active slice;
-- project-specific commands, standards, and constraints;
-- change specifications and acceptance criteria;
-- focused quality gates;
-- evidence records, handoffs, risks, and next actions.
-
-The workspace is designed to be read by future sessions and different agent hosts. It complements existing roadmaps, architecture documents, and issue trackers instead of replacing them.
-
-### Risk-scaled workflow
-
-GSE keeps small tasks light and applies stronger controls only when the risk requires them.
-
-| Level | Use it for | Typical proof |
-|---|---|---|
-| `lite` | Small fixes, scripts, documentation, narrow refactors | One focused check or direct evidence |
-| `standard` | User-visible features, API or state changes, multi-file behavior | Focused tests plus an integration, API, or UI smoke when needed |
-| `enterprise` | Security, migrations, public contracts, releases, architecture, long-running coordination | Risk-specific hard gates, review, rollback, and accepted evidence |
-
-Choosing `enterprise` does not make every change heavyweight. Routine work still gets focused checks; review, rollback planning, and hard gates are added when release, security, migration, or similar risks call for them.
-
-### Stable task routing
-
-GSE distinguishes a **top-level plan unit** from the internal actions needed to complete it.
-
-- A selected new slice has a stable `topLevelPlanUnitId` and `taskCreationIntent: create`.
-- Repeated continuation of the same active slice reports `taskCreationIntent: reuse`.
-- Reads, searches, tests, reviews, retries, repairs, evidence collection, and context rollover remain internal actions.
-- Alternative next-slice candidates are advisory and cannot independently create host tasks.
-
-This makes repeated `gse continue` calls idempotent at the planning boundary while preserving legitimate task creation for genuinely new work.
-
-### Bounded context and compact continuation
-
-Long sessions can request a compact machine-readable continuation packet:
-
-```bash
-gse continue --target . --json --compact
-```
-
-The compact packet contains the active slice, routing intent, selected candidate, first steps, focused commands, context health, worker recommendation, risks, and a bounded prompt. GSE reports an estimated output budget and avoids nesting the full child report inside another JSON envelope.
-
-GSE can bound its own packets. It cannot guarantee the total token cost of the host, hidden system context, external tools, or independently executed agents.
-
-### Controlled multi-agent use
-
-GSE defines coordinator, planner, locator, builder, verifier, reviewer, QA, evidence, and release responsibilities. These are accountability roles, not proof that real subagents were launched.
-
-A real worker is recommended only when the work is bounded, independent, explicitly owned, and benefits from parallel execution. Dispatch remains `not-observed` until the host records actual execution evidence. If the host has no subagent capability, the same roles can run sequentially in the main session.
-
-### Evidence before completion
-
-GSE uses three evidence levels:
-
-```text
-result -> verified -> accepted
-```
-
-- `result`: an artifact exists or a command ran;
-- `verified`: focused checks prove behavior in the current environment;
-- `accepted`: an owner, CI gate, review gate, release gate, product gate, or external system accepts the verified result.
-
-Local success cannot silently become a public, production, marketplace, registry, or cross-host claim.
+Long-running agent work often loses scope, acceptance criteria, and evidence between sessions. GSE keeps those contracts in the repository so continuation is deterministic and reviewable.
 
 ## Quick Start
 
-### Install from npm
+```bash
+npm install -g @t275005746/gse
+gse init --target .
+gse continue --target . --json --compact
+```
+
+## Use GSE When
+
+Use GSE when a project will continue across many agent sessions, when contributors share a repository, or when a change needs explicit acceptance and proof. Use a lighter host workflow for disposable experiments and trivial edits.
+
+## Find GSE
+
+Canonical source:
+
+- GitHub: <https://github.com/275005746/gse>
+- Agent entrypoint: [`SKILL.md`](SKILL.md)
+- CLI package: [`@t275005746/gse`](https://www.npmjs.com/package/@t275005746/gse)
+
+The repository is designed to be discoverable by GitHub-based Agent Skill indexes. A directory or catalog listing is external evidence: this repository does not claim inclusion until a real public listing or index result is recorded.
+
+## Install GSE
+
+### As an Agent Skill
+
+Clone the repository and configure the host to load the directory containing `SKILL.md`:
+
+```bash
+git clone https://github.com/275005746/gse.git
+```
+
+The exact installation directory is host-specific. Follow the host's Skill installation convention; do not infer native support from a generated adapter file.
+
+### As a CLI
 
 ```bash
 npm install -g @t275005746/gse
 gse status --target .
 ```
 
-Node.js 18 or newer is required.
+Requires Node.js 18 or newer.
 
-### Initialize a project
+## Use GSE in a project
+
+Initialize the portable workspace:
 
 ```bash
 gse init --target .
 ```
 
-GSE selects a conservative mode automatically. You can also choose one explicitly:
-
-```bash
-node scripts/init-project.mjs --target . --mode lite
-node scripts/init-project.mjs --target . --mode standard
-node scripts/init-project.mjs --target . --mode enterprise
-```
-
-Initialization is additive. Existing product, architecture, and engineering documents stay where they are.
-
-### Inspect current state
+Then inspect and continue it:
 
 ```bash
 gse status --target . --json
-```
-
-### Continue the current work
-
-```bash
-gse continue --target .
 gse continue --target . --json --compact
 ```
 
-### Run focused validation
+For a fresh or resumed session, read these files before planning:
 
-```bash
-node scripts/run-validation-profile.mjs --target . --profile lite
+```text
+.gse/state.json
+.gse/current-slice.md
+.gse/evidence/      # files named by lastEvidence
+.gse/project-profile.md
+.gse/quality-gates.md
 ```
 
-Use `standard`, `enterprise`, or `release` only when the change or claim requires that level of evidence.
+The continuation packet is the bounded next-action contract. Keep work under the same top-level Plan Unit unless it calls for rollover or owner input.
 
-## Typical Workflow
+## What counts as a Slice
 
-1. **Discover** the project, its real commands, current state, and unresolved risks.
-2. **Select** one coherent outcome as the active plan unit.
-3. **Specify** scope, acceptance criteria, evidence, and stop conditions in proportion to risk.
-4. **Execute** the smallest implementation slice that proves the outcome.
-5. **Verify** with the narrowest check that covers the changed behavior.
-6. **Review** only at the boundary justified by the risk.
-7. **Record evidence** and either close the slice, repair it, or select the next one.
-8. **Learn** from reusable failures without turning every incident into more process.
+A Slice is one complete feature implementation that can run and be verified independently. A Slice is not only a type change, call-site change, test change, resolver change, status change, documentation change, or handoff.
 
-A normal continuation should answer:
+Each Slice records:
+
+- outcome;
+- scope and non-goals;
+- acceptance criteria;
+- proof boundary;
+- evidence matrix;
+- risks;
+- one verifiable next action.
+
+Completing a Slice does not silently complete the Goal or the session. The next Slice continues from the same approved Plan Unit.
+
+## The workflow
+
+1. **Discover** the repository, commands, stage, and risks.
+2. **Select** one coherent Slice.
+3. **Specify** outcome, scope, acceptance, proof, and non-goals.
+4. **Execute** the smallest complete implementation.
+5. **Verify** the changed behavior with focused evidence.
+6. **Record** state, evidence, risks, and the next action.
+7. **Continue** the Plan Unit or stop for a real decision.
+8. **Learn** only what is reusable.
+
+Normal handoff fields are:
 
 ```text
 Outcome:
@@ -166,119 +123,106 @@ Evidence:
 Next action:
 ```
 
-## Project Workspace
+## Evidence is deliberately conservative
 
-A typical project starts with:
+GSE distinguishes:
 
 ```text
-.gse/
-  README.md
-  state.json
-  project-profile.md
-  goal-map.md
-  quality-gates.md
-  changes/
-  evidence/
-  handoffs/
-  templates/
+result -> verified -> accepted
 ```
 
-Not every project needs every file. GSE scaffolding degrades by project size and should not overwrite mature repository conventions.
+`result` means an artifact or command result exists. `verified` means local focused checks support the behavior. `accepted` requires a real owner, CI, registry, catalog, release, or external-system record.
+
+Local audits do not prove:
+
+- another host adopted or ran GSE;
+- native slash-command support;
+- host task creation or worker dispatch;
+- registry publication beyond the recorded channel evidence;
+- Skill-directory indexing or catalog acceptance;
+- public product acceptance.
+
+Use `unknown`, `unavailable`, or `external-required` when telemetry or external evidence is missing.
 
 ## Command Overview
 
-Common CLI routes:
-
 ```bash
 gse status --target .
-gse continue --target .
 gse continue --target . --json --compact
-gse stage --target . --intent "ship the next verified slice"
+gse stage --target . --intent "deliver the next verified Slice"
 gse doctor --target .
 gse acceptance --target .
 gse close --target .
 ```
 
-Portable command semantics are also available to hosts that invoke GSE as a skill:
+The portable host form is:
 
 ```text
 /gse init       /gse adopt      /gse continue
 /gse stage      /gse status     /gse doctor
 /gse change     /gse verify     /gse acceptance
 /gse learn      /gse audit      /gse close
-/gse package    /gse install    /gse release
 ```
 
-`close` is a readiness check, not permission to fabricate evidence or bypass a failed gate.
+`close` reports readiness; it cannot manufacture acceptance or bypass a failed gate.
 
-For the complete command and script index, see [`references/commands.md`](references/commands.md) and [`references/script-index.md`](references/script-index.md).
+## Project Workspace
+
+A typical initialized project contains:
+
+```text
+.gse/
+  state.json
+  current-slice.md
+  project-profile.md
+  goal-map.md
+  quality-gates.md
+  changes/
+  evidence/
+  handoffs/
+```
+
+GSE is additive and risk-scaled. It should preserve mature project conventions rather than replace them.
+
+## Operating Contracts
+
+- **Risk-scaled workflow:** choose `lite`, `standard`, or `enterprise` according to project risk; every mode keeps portable state in `.gse/`.
+- **Stable task routing:** `topLevelPlanUnitId` preserves Plan Unit continuity, while `taskCreationIntent: create` is advisory intent for a capable host, not proof that a task was created.
+- **Bounded context and compact continuation:** `/gse status` and `/gse continue --compact` expose the current contract without requiring chat history.
+- **Evidence before completion:** use `result -> verified -> accepted`; missing runtime evidence remains `not-observed`.
+- **Controlled multi-agent use:** dispatch only when the host supports it and preserve ownership and evidence boundaries.
 
 ## Honest Boundaries
 
-GSE can:
+Local success cannot silently become external acceptance. Registry evidence proves only its recorded channel; marketplace approval and other-host execution require separate records.
 
-- preserve project-local engineering context;
-- route work by risk and current stage;
-- produce stable task-routing metadata;
-- bound its compact continuation output;
-- prepare worker packets and role assignments;
-- run local audits and record evidence;
-- detect missing owner or external acceptance.
-
-GSE cannot by itself:
-
-- force a host to create, reuse, or dispatch tasks correctly;
-- prove that a subagent ran without host evidence;
-- compact a host's private live conversation state;
-- guarantee total model or tool token consumption;
-- replace owner approval, CI, registry, marketplace, or production evidence;
-- turn a local verification into external acceptance.
-
-These boundaries are part of the engineering model, not missing success messages.
-
-## Use GSE When
-
-GSE is useful when:
-
-- a project will continue across many agent sessions;
-- several agents, models, tools, or human contributors share the work;
-- changes need explicit scope and acceptance criteria;
-- releases, public contracts, security, or migrations require auditable evidence;
-- context cost and repeated orchestration are becoming hard to control;
-- you want agents to say what is verified and what is still only claimed.
-
-For a one-line edit or disposable experiment, use the lightest path or no scaffold at all.
-
-## Documentation
-
-- [`SKILL.md`](SKILL.md): agent entrypoint and routing rules
-- [`references/operating-model.md`](references/operating-model.md): core operating model
-- [`references/task-levels.md`](references/task-levels.md): risk-scaled task levels
-- [`references/context-orchestration.md`](references/context-orchestration.md): context budgets and task reuse
-- [`references/agent-roles.md`](references/agent-roles.md): role and dispatch boundaries
-- [`references/quality-gates.md`](references/quality-gates.md): verification and completion gates
-- [`references/release.md`](references/release.md): release workflow and claim boundaries
-
-## Packaging and Development
-
-Validate a checked-out copy:
-
-```bash
-node scripts/validate-gse.mjs --root . --profile lite --json
-```
-
-Package and install a local copy:
+## Package Development
 
 ```bash
 node scripts/package-gse.mjs --root . --out <package-dir> --label <release-label>
 node scripts/install-gse.mjs --source <package-dir> --target <skill-dir>
 ```
 
-Release bundles, integrity manifests, signing, and trust records are documented in [`references/packaging.md`](references/packaging.md).
+See [`references/packaging.md`](references/packaging.md) for npm, bundle, integrity, and installation audits.
 
 ## Official Services
 
-[GateHub](https://gatehub.top/) is the official maintenance and support platform for GSE. It also provides an AI model relay service, model access, GSE support, and project collaboration services.
+GSE is officially maintained by [GateHub](https://gatehub.top/). GateHub also provides an AI model relay service; that related service is not evidence of GSE marketplace approval or host-runtime support.
+
+## Documentation
+
+Start with [`SKILL.md`](SKILL.md), then use [`references/commands.md`](references/commands.md), [`references/quality-gates.md`](references/quality-gates.md), and [`references/packaging.md`](references/packaging.md) for deeper contracts.
+
+## Validate GSE itself
+
+```bash
+node scripts/audit-agent-entrypoint.mjs --root . --json
+node scripts/audit-project-capability-registry.mjs --root . --target . --json
+node scripts/validate-gse.mjs --root . --profile lite --json
+git diff --check
+```
+
+See [`SKILL.md`](SKILL.md) for the agent-first entry contract and [`references/commands.md`](references/commands.md) for the complete command index.
 
 ## License
 

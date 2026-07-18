@@ -64,6 +64,7 @@ const existingImplementation = createFixture('existing-implementation', {
   '.gse/state.json': JSON.stringify({ phase: 'execute', currentSlice: { status: 'in-progress' } }, null, 2),
   'src/app.ts': 'export const app = true\n',
   'tests/app.test.ts': 'test("app", () => {})\n',
+  'CHANGELOG.md': '# Release\n\nSmoke and rollback notes.\n',
 })
 const genericUi = createFixture('generic-ui', {
   'README.md': '# Dashboard\n',
@@ -85,6 +86,17 @@ const uiResult = detect(genericUi, 'Finish this product and declare it complete'
 const gseResult = detect(root, 'Continue GSE skill development')
 const adoptingResult = detect(adoptingProject, 'Continue adopting GSE into this existing project')
 
+const precedenceProject = createFixture('approved-stage-precedence', {
+  'README.md': '# Existing app\n',
+  'docs/requirements.md': '# Requirements\n\n## Acceptance Criteria\n\n- App remains usable.\n',
+  '.gse/state.json': JSON.stringify({ phase: 'execute', currentSlice: { status: 'in-progress' } }, null, 2),
+  '.gse/evidence/verification.md': '# Verification\n\nAcceptance smoke passed.\n',
+  'CHANGELOG.md': '# Release\n\nSmoke and rollback notes.\n',
+  'src/app.ts': 'export const app = true\n',
+  'tests/app.test.ts': 'test("app", () => {})\n',
+})
+const precedenceResult = detect(precedenceProject, 'Continue the approved implementation slice')
+
 const reference = read('references/stage-orchestrator.md')
 const skill = read('SKILL.md')
 const router = read('references/router.md')
@@ -103,7 +115,7 @@ const outputFields = ['current_stage', 'stage_basis', 'missing_artifacts', 'requ
 const checks = [
   check('SO01', 'stage orchestrator reference exists', Boolean(reference), 'references/stage-orchestrator.md'),
   check('SO02', 'stage model covers the complete delivery lifecycle', stages.every((stage) => reference.includes(`\`${stage}\``)), stages.join(', ')),
-  check('SO03', 'stage decision uses repository evidence and does not trust conversation or state alone', /repository evidence/i.test(reference) && /state.*hint|hint.*state/i.test(reference) && /conversation history/i.test(reference), 'stage decision evidence rules'),
+  check('SO03', 'orchestrator exposes advisory-only precedence when persisted stage conflicts with heuristics', /advisory|approved.*wins|conflict/i.test(reference) && /state.*hint|hint.*state/i.test(reference), 'stage precedence contract'),
   check('SO04', 'orchestrator loads only current-stage references', /only.*current stage|current-stage.*only/i.test(reference) && /do not load every|must not load every/i.test(reference), 'progressive disclosure rule'),
   check('SO05', 'stage output contract is machine-scannable', outputFields.every((field) => reference.includes(field)), outputFields.join(', ')),
   check('SO06', 'opportunity gate blocks coding-first product shells', /opportunity gate/i.test(reference) && /target user/i.test(reference) && /comparable|alternative/i.test(reference) && /go\/no-go/i.test(reference), 'product value gate'),
@@ -116,7 +128,7 @@ const checks = [
   check('SO13', 'quality gates and agent roles link back to stage control', qualityGates.includes('stage-orchestrator.md') && roles.includes('stage-orchestrator.md'), 'quality-gates.md + agent-roles.md'),
   check('SO14', 'capability matrix governs stage orchestration', matrix.includes('Stage orchestration and progressive disclosure') && matrix.includes('audit-stage-orchestrator.mjs'), 'capability-execution-matrix.md'),
   check('SO15', 'empty product routes before implementation', emptyResult.status === 0 && ['intake', 'opportunity'].includes(emptyResult.data?.current_stage) && emptyResult.data?.decision !== 'complete', JSON.stringify(emptyResult.data), emptyResult.stderr),
-  check('SO16', 'existing half-built project resumes implementation without restarting', existingResult.status === 0 && existingResult.data?.current_stage === 'implementation' && existingResult.data?.decision === 'proceed', JSON.stringify(existingResult.data), existingResult.stderr),
+  check('SO16', 'existing half-built project resumes implementation without restarting', existingResult.status === 0 && existingResult.data?.current_stage === 'implementation' && existingResult.data?.approved_stage === 'implementation' && existingResult.data?.stage_decision === 'approved-state-wins', JSON.stringify(existingResult.data), existingResult.stderr),
   check('SO17', 'generic UI cannot pass as complete without design evidence', uiResult.status === 0 && uiResult.data?.current_stage === 'design' && ['loop_back', 'block'].includes(uiResult.data?.decision), JSON.stringify(uiResult.data), uiResult.stderr),
   check('SO18', 'stage detector returns bounded references and gate fields', [emptyResult, existingResult, uiResult].every(({ data }) => Array.isArray(data?.required_references) && data.required_references.length > 0 && data.required_references.length <= 6 && data?.evidence_gate && data?.next_stage), 'three stage fixtures'),
   check('SO19', 'stage audit is wired into focused and consolidated validation', validationProfile.includes('audit-stage-orchestrator.mjs') && validator.includes('audit-stage-orchestrator.mjs'), 'validation wiring'),
@@ -124,6 +136,7 @@ const checks = [
   check('SO21', 'portable stage command exposes stage advice', commandRunner.includes("stage: {") && commandRunner.includes("verb === 'stage'") && commandsReference.includes('/gse stage'), 'run-gse-command.mjs + commands.md'),
   check('SO22', 'isolated UI-like files do not misroute a non-UI project', gseResult.status === 0 && gseResult.data?.current_stage !== 'design', JSON.stringify(gseResult.data), gseResult.stderr),
   check('SO23', 'adoption state without implementation does not jump to learning', adoptingResult.status === 0 && adoptingResult.data?.current_stage === 'intake', JSON.stringify(adoptingResult.data), adoptingResult.stderr),
+  check('SO24', 'approved persisted stage wins over verification or release heuristics', precedenceResult.status === 0 && precedenceResult.data?.approved_stage === 'implementation' && precedenceResult.data?.current_stage === 'implementation' && precedenceResult.data?.stage_decision === 'approved-state-wins' && precedenceResult.data?.stage_conflict === true && ['verification', 'release'].includes(precedenceResult.data?.detected_stage) && precedenceResult.data?.lifecycle_stage === 'build' && precedenceResult.data?.required_references?.includes('operating-model.md'), JSON.stringify(precedenceResult.data), precedenceResult.stderr),
 ]
 
 const failed = checks.filter((item) => item.status === 'failed').length
@@ -138,6 +151,7 @@ const report = {
     genericUi: uiResult.data,
     gseSkill: gseResult.data,
     adoptingProject: adoptingResult.data,
+  precedenceProject: precedenceResult.data,
   },
   checks,
   limits: [

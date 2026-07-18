@@ -1,44 +1,38 @@
-# Current Slice
-
 ## Outcome
 
-GSE-169 adds budget-aware context governance: Codex rollout health is audited, `/gse continue` changes route under context pressure, and workers receive bounded target-contained context packs plus a fixed result capsule contract.
+GSE-172 makes the portable entrypoint usable across sessions: a fresh agent can read `.gse/`, resume from the current Slice, use bounded `/gse continue`, and hand off the next action without relying on prior conversation history or inferring Host capability.
 
-Roadmap anchor: `references/final-form-roadmap.md` (`final-form`) and `references/capability-execution-matrix.md` (`Context health and budget-aware agent routing`).
+Roadmap anchor: `references/final-form-roadmap.md` (`final-form`) and `references/capability-execution-matrix.md` (`Task admission and bounded continuation`).
 
 ## Scope
 
-In scope: incremental rollout inspection; green/yellow/orange/red health policy; fixed coordinator/worker/reviewer/reserve budgets; `/gse context`; execute-gated checkpoint generation; `/gse continue` rollover routing; context-pack containment and size limits; result capsule contract; focused audits; Lite validation; command and reference documentation.
+In scope: cross-session `AGENTS.md` entry contract; state/current-Slice/evidence read order; bounded continuation command discovery; same-Plan-Unit continuity; evidence handoff requirements; host and external claim boundaries; entrypoint audit coverage; capability registry and Lite regressions.
 
-Out of scope: host-native task creation, mutation of a live Codex context, automatic host compaction, real subagent-dispatch claims, or external release publication.
+Out of scope: host-native task creation, host worker dispatch, native slash-command support, registry publication, marketplace approval, public acceptance, or external release publication.
 
 ## Acceptance
 
-- Token use, compaction count, and exhaustion sentinel map to deterministic health and routing.
-- Orange/red disable scope expansion and make `/gse continue` recommend `context-rollover`.
-- Missing host evidence returns `unavailable` without disabling portable policy.
-- Context packs are limited to 8 files and 8,000 estimated tokens and reject paths outside the target root.
-- Result capsules declare an 800 estimated-token limit and eight required fields.
-- Goal payload risk and the 8-12 line active-goal contract are surfaced.
-- Focused audits, Lite validation, encoding, syntax, command/matrix audits, and diff checks pass.
+- A new session is directed to read `.gse/state.json`, `.gse/current-slice.md`, and named evidence before planning.
+- The active Slice contract and `nextAction` are explicitly authoritative for continuation.
+- `/gse continue --json --compact` is the documented bounded resume route.
+- Cross-session work remains under the same top-level Plan Unit unless a packet requires rollover or an owner decision.
+- Handoff requires focused evidence, updated portable state, and an explicit next action without relying on prior conversation history.
+- Portable outputs retain Host and external claim boundaries; external acceptance remains `publicAccepted: not-accepted` with three pending gates.
 
 ## Evidence Plan
 
-- `node scripts/audit-context-orchestrator.mjs --root . --json`
-- `node scripts/audit-context-health.mjs --target . --session-id 019f65e7-fa54-7f52-a45e-242bcef79d0b --json`
-- `node scripts/audit-continue-preflight.mjs --root . --json`
-- `node scripts/audit-commands.mjs --root . --json`
-- `node scripts/audit-capability-execution-matrix.mjs --root . --json`
-- `cmd /c npm run validate:lite`
-- `cmd /c npm run check:encoding`
+- `node scripts/audit-agent-entrypoint.mjs --root . --json`
+- `node scripts/audit-project-capability-registry.mjs --root . --target . --json`
+- `node scripts/validate-gse.mjs --root . --profile lite --json`
 - `git diff --check`
 
 ## Risk
 
-- GSE can detect pressure and prepare rollover, but cannot prevent host injection or create a new Codex task through portable scripts.
-- Rollout formats are host-specific and may change; missing/unreadable evidence must continue to degrade honestly.
-- The current historical `.gse/goal-map.md` is intentionally retained as durable repository evidence and is flagged as `goal-payload-risk`; it must not be copied into an active host goal.
+- Cross-session instructions improve discoverability but do not prove another Host adopted or executed GSE.
+- Portable continuation and task admission remain advisory; they cannot create or dispatch a host task or complete a host Goal.
+- Local validation is not registry publication, marketplace approval, native slash-command evidence, or public acceptance.
+- External owner/registry, marketplace, and other-host runtime gates remain pending and must be re-audited only after real evidence is attached.
 
 ## Next Action
 
-Review the final diff, commit the GSE-169 branch, push it, and open a pull request.
+Select and implement the next independently verifiable functional Slice under the same top-level Plan Unit; keep external acceptance as an owner-gated handoff.

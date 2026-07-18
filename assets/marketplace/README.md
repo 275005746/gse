@@ -1,7 +1,15 @@
-# Marketplace Metadata
+# Agent Skill Discovery
 
-This folder contains portable discovery metadata for publishing or listing GSE in a skill, plugin, or agent-workflow catalog.
+This directory contains local metadata that helps a public Skill index, catalog maintainer, or human reviewer understand GSE.
 
-The metadata is intentionally host-neutral. It describes what GSE is, how to validate it, which entrypoints matter, and which host capabilities still require separate runtime evidence.
+The discovery goal is simple:
 
-Do not add maintainer secrets, local machine paths, private project names, or unverified marketplace approval claims here.
+1. an Agent can find the public GitHub source;
+2. an Agent can identify `SKILL.md` as the entrypoint;
+3. a user can install the CLI from npm;
+4. a new session can resume from `.gse/`;
+5. every external claim remains tied to real evidence.
+
+The metadata is host-neutral. It must not contain maintainer secrets, local machine paths, private project names, fabricated listing URLs, approval receipts, or claims that another host has executed GSE.
+
+A local discovery audit proves only that this metadata is internally consistent. It does not prove Skill-directory indexing, catalog acceptance, marketplace approval, ranking, or public search visibility.

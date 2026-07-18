@@ -1,46 +1,61 @@
-# Marketplace Discovery
+# Agent Skill Discovery
 
-Use this when preparing GSE for a public catalog, skill marketplace, plugin listing, GitHub release page, or internal agent-workflow registry.
+Use this document when preparing GSE for discovery by other AI coding agents.
 
-Discovery metadata should help people find and evaluate GSE without overstating trust.
+## Discovery contract
 
-## Required Metadata
-
-- Name and display name.
-- Short tagline and summary.
-- Categories and keywords that describe the workflow naturally.
-- Entrypoints for humans and agents.
-- Validation commands.
-- Distribution and signing references.
-- Host support status with honest labels.
-- Boundaries and unverified claims.
-
-The canonical local metadata file is:
+GSE is discoverable through its public source repository and its standard root Skill entrypoint:
 
 ```text
-assets/marketplace/gse-listing.json
+https://github.com/275005746/gse
+SKILL.md
 ```
 
-## Search Language
-
-Use normal explanatory language around terms such as agentic engineering, spec-driven development, SDD, AI coding agents, goal maps, evidence gates, change control, and role-based execution. Do not add isolated search-term blocks that read like keyword stuffing.
-
-## Trust Boundary
-
-Discovery metadata is not marketplace approval.
-
-A listing can be:
-
-- `result`: drafted metadata exists.
-- `verified`: metadata passes local audit and matches package validation.
-- `accepted`: the target marketplace, catalog owner, or release owner accepts it.
-
-## Validation
-
-Run:
+The npm package is a separate CLI installation channel:
 
 ```text
-node <skill>/scripts/audit-marketplace-discovery.mjs --root <skill> --json
+https://www.npmjs.com/package/@t275005746/gse
 ```
 
-For release trust, also use `references/release-trust.md`.
+A directory such as a GitHub-based Agent Skill index may crawl or list the repository. The repository cannot mark that state locally. A listing is accepted only when a real public URL, index result, catalog record, or maintainer response exists.
+
+## What a directory needs to expose
+
+- `name`: `gse`
+- a short description of Goal-Spec-Evidence Engineering;
+- the public GitHub source URL;
+- `SKILL.md` as the agent entrypoint;
+- the npm CLI package URL;
+- Node.js 18 or newer for the CLI;
+- installation and continuation commands;
+- supported claims and explicit host limitations.
+
+## Installation paths
+
+As a Skill, load the directory containing `SKILL.md` according to the host's own Skill convention. As a CLI, install:
+
+```bash
+npm install -g @t275005746/gse
+gse status --target .
+```
+
+## Evidence states
+
+Use these states and do not collapse them:
+
+- `result`: local metadata or a draft listing exists;
+- `verified`: local metadata and package checks pass;
+- `accepted`: an external directory, catalog, registry, or owner has accepted the listing or publication;
+- `external-required`: the external record has not been attached.
+
+The local marketplace audit is a metadata check. It is not a marketplace approval check.
+
+## Local validation
+
+```bash
+node scripts/audit-marketplace-discovery.mjs --root . --json
+node scripts/audit-npm-package-metadata.mjs --root . --json
+node scripts/audit-npm-tarball-install.mjs --root . --json
+```
+
+These commands do not publish GSE, submit a listing, create an index entry, or prove host-native installation.

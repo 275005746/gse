@@ -1,6 +1,6 @@
 # GSE Public Acceptance Handoff
 
-Generated: 2026-07-17T14:08:16.226Z
+Generated: 2026-07-18T19:15:56.971Z
 Root: <gse-root>
 Release label: unreleased
 
@@ -17,30 +17,10 @@ Give the owner and future agents one executable checklist for public acceptance.
 ## Current Boundary
 
 - Public accepted: not-accepted
-- Pending owner/external gates: 3
+- Pending owner/external gates: 2
 - Source of truth: `scripts/audit-public-acceptance-readiness.mjs` and `references/final-readiness.md`
 
 ## Execution Order
-
-### 5. Public channel - Public registry publication
-
-- Current status: external-required
-- Responsible party: external registry
-- Current evidence: no public registry publication record is claimed
-- Required evidence: Real registry package URL, version, digest, publication date, verification command, and accepted evidence.
-- Record command:
-
-```bash
-node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force
-```
-
-- Preflight command:
-
-```bash
-node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json
-```
-
-- Promotion rule: create a real accepted record, then re-run `node scripts/audit-final-readiness.mjs --root __GSE__ --json` and `node scripts/audit-public-acceptance-readiness.mjs --root __GSE__ --json`.
 
 ### 6. Marketplace or catalog - Marketplace approval
 

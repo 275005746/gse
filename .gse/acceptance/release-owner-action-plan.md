@@ -1,14 +1,14 @@
 # GSE Release Owner Action Plan
 
-Generated: 2026-07-17T14:08:18.174Z
+Generated: 2026-07-18T19:15:57.245Z
 Source manifest: `.gse/acceptance/release-status-manifest.json`
 
 ## Current Status
 
 - Public accepted: not-accepted
-- Verified rows: 20
+- Verified rows: 21
 - Owner-required rows: 0
-- External-required rows: 3
+- External-required rows: 2
 - Native slash-command records: 0
 - Portable text-command records: 0
 
@@ -20,25 +20,6 @@ Source manifest: `.gse/acceptance/release-status-manifest.json`
 - Owner and external gates must be recorded with accepted evidence before GSE can claim accepted public release readiness.
 
 ## Action Groups
-
-### External Registry
-
-#### Public registry publication
-
-- Status: external-required
-- Current evidence: no public registry publication record is claimed
-- Required evidence: Real registry package URL, version, digest, publication date, verification command, and accepted evidence.
-- Record command:
-
-```text
-node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force
-```
-
-- Preflight command:
-
-```text
-node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json
-```
 
 ### External Marketplace
 

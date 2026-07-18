@@ -40,6 +40,15 @@ const requiredRoutes = [
   'references/router.md',
   'references/stage-orchestrator.md',
 ]
+const continuationContract = [
+  'Cross-Session Continuation',
+  'currentSlice',
+  'nextAction',
+  '/gse continue --json --compact',
+  'same top-level Plan Unit',
+  'do not create or dispatch Host tasks',
+  'public acceptance',
+]
 const capabilityRegistries = [
   '.gse/host-capabilities.md',
   '.gse/skills/',
@@ -61,6 +70,8 @@ const checks = [
   check('AE08', 'host adapters preserve native runtime claim boundaries', /does not prove native/i.test(codexAdapter) && /does not prove native/i.test(claudeAdapter) && /not proof of a native/i.test(codexCommand) && /do not mark.*slash commands.*verified/is.test(claudeCommand), 'Codex and Claude pointer boundaries'),
   check('AE09', 'package includes the shared entrypoint', packageJson.includes('AGENTS.md'), 'package.json files'),
   check('AE10', 'focused audit is wired into Lite and consolidated validation', validationProfile.includes('audit-agent-entrypoint.mjs') && validator.includes('audit-agent-entrypoint.mjs'), 'validation wiring'),
+  check('AE11', 'entrypoint defines a bounded cross-session continuation contract', continuationContract.every((item) => entrypoint.includes(item)), continuationContract.join(', ')),
+  check('AE12', 'cross-session handoff does not depend on prior conversation history', /without relying on prior conversation history/i.test(entrypoint) && /claim boundary is preserved/i.test(entrypoint), 'portable handoff boundary'),
 ]
 
 const failed = checks.filter((item) => item.status === 'failed').length

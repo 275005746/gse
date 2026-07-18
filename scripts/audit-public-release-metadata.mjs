@@ -67,12 +67,14 @@ const selectedFailureRun = exists('scripts/record-public-release.mjs')
   : null
 const selectedFailureData = selectedFailureRun ? parseJson(selectedFailureRun.stdout) : null
 
-const ownerLicensePending =
-  publicRelease.includes('GSE must not choose a license by guessing') &&
-  publicRelease.includes('owner-required') &&
-  changelog.includes('Open-source license selection remains an owner decision')
-
 const releaseRecord = read('.gse/releases/public-release-owner-required.md')
+const ownerLicenseAccepted =
+  publicRelease.includes('GSE must not choose a license by guessing') &&
+  releaseRecord.includes('License status: selected') &&
+  releaseRecord.includes('SPDX identifier: MIT') &&
+  releaseRecord.includes('License file: LICENSE') &&
+  releaseRecord.includes('Evidence status: accepted')
+
 const ownerRequiredRecord =
   releaseRecord.includes('License status: owner-required') &&
   releaseRecord.includes('Evidence status: result')
@@ -107,14 +109,14 @@ const changelogTerms = [
   '### Added',
   '### Verified',
   '### Not Yet Accepted',
-  'Public registry publication and marketplace approval are not verified',
+  'Marketplace approval and other-host runtime invocation remain external-required',
 ]
 
 const checks = [
   check('PR01', 'public release reference exists', exists('references/public-release.md'), 'references/public-release.md'),
   check('PR02', 'public release record template exists', exists('assets/templates/public-release-record.md'), 'assets/templates/public-release-record.md'),
   check('PR03', 'changelog exists with public-release boundaries', exists('CHANGELOG.md') && changelogTerms.every((term) => changelog.includes(term)), 'CHANGELOG.md'),
-  check('PR04', 'license decision is owner-gated and not guessed', ownerLicensePending, 'references/public-release.md, CHANGELOG.md'),
+  check('PR04', 'license decision is owner-gated and recorded', ownerLicenseAccepted, 'references/public-release.md, .gse/releases/public-release-owner-required.md'),
   check('PR05', 'public release record captures owner/license/release evidence fields', releaseRecordFields.every((field) => template.includes(field)), releaseRecordFields.join(', ')),
   check('PR06', 'release docs route to public metadata, trust, and marketplace gates', release.includes('references/public-release.md') && publicRelease.includes('references/release-trust.md') && publicRelease.includes('references/marketplace-discovery.md') && releaseTrust.includes('release-trust') && marketplace.includes('marketplace'), 'release, public-release, release-trust, marketplace references'),
   check('PR07', 'SKILL routes public release metadata reference', skill.includes('references/public-release.md'), 'SKILL.md Reference Routing'),

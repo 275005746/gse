@@ -107,6 +107,95 @@ export function inspectGoalPayload(target) {
   return { status: goalMap.chars > 30000 || goalMap.lines > 320 ? 'goal-payload-risk' : 'bounded', goalMap, currentSlice, activeGoalContract: { maxLines: 12, role: 'execution-index-only' }, recommendation: 'Keep active goal at 8-12 lines; keep only current focus, current slice, next verification, and evidence pointers in goal-map; preserve history in evidence/slice logs.' }
 }
 
+const boundedText = (value, max = 240) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+const boundedPaths = (values, max = 8) => [...new Set((Array.isArray(values) ? values : []).filter((value) => typeof value === 'string' && value.trim()).map((value) => boundedText(value.replace(/\\/g, '/').replace(/^\.\//, ''), 240)))].slice(0, max)
+
+export function buildContextResumeSummary({
+  target = null,
+  state = null,
+  health = null,
+  projectStage = null,
+  preflight = null,
+  acceptance = null,
+  evidence = null,
+  risks = [],
+  sourcePaths = [],
+  rolloverReason = null,
+} = {}) {
+  const currentSlice = state?.currentSlice ?? {}
+  const topLevelPlanUnitId = state?.topLevelPlanUnitId || currentSlice.topLevelPlanUnitId || (currentSlice.id ? `slice:${currentSlice.id}` : null)
+  const effectiveStage = projectStage?.current_stage || state?.stage || state?.phase || null
+  const advisoryStage = projectStage?.advisoryStage || projectStage?.advisory_stage || projectStage?.detected_stage || null
+  const activeRisks = (Array.isArray(risks) ? risks : []).slice(0, 3).map((risk) => typeof risk === 'string' ? boundedText(risk) : {
+    id: risk?.id ?? null,
+    severity: risk?.severity ?? null,
+    summary: boundedText(risk?.summary || risk?.title || risk?.description),
+  })
+  const evidenceRefs = Array.isArray(evidence?.references) ? evidence.references : Array.isArray(evidence) ? evidence : []
+  const sources = boundedPaths(sourcePaths)
+  const summary = {
+    schemaVersion: 1,
+    kind: 'gse-context-resume-index',
+    target: target ? path.resolve(target) : null,
+    stage: {
+      effective: effectiveStage,
+      advisory: advisoryStage,
+      conflict: Boolean(effectiveStage && advisoryStage && effectiveStage !== advisoryStage),
+      decision: projectStage?.decision || projectStage?.stage_decision || null,
+    },
+    planUnit: {
+      topLevelPlanUnitId: boundedText(topLevelPlanUnitId, 120) || null,
+      currentSlice: {
+        id: boundedText(currentSlice.id, 120) || null,
+        status: boundedText(currentSlice.status, 80) || 'unknown',
+        outcome: boundedText(currentSlice.outcome || currentSlice.title || 'Continue the current verifiable slice.'),
+        nextAction: boundedText(currentSlice.nextAction || 'Continue the smallest verifiable GSE slice.'),
+      },
+    },
+    acceptance: {
+      status: acceptance?.status || preflight?.status || 'unknown',
+      criteria: (Array.isArray(acceptance?.criteria) ? acceptance.criteria : []).slice(0, 5).map((item) => boundedText(item)),
+      blockedCount: Number(acceptance?.blockedCount ?? acceptance?.pendingGates ?? 0),
+    },
+    evidence: {
+      latestStatus: evidence?.latestStatus || evidence?.status || null,
+      latestLevel: evidence?.latestLevel || evidence?.evidenceLevel || null,
+      references: evidenceRefs.slice(0, 8).map((item) => typeof item === 'string' ? { path: item } : {
+        path: item?.path || item?.evidenceFile || null,
+        status: item?.status || null,
+        id: item?.id || item?.checkId || null,
+      }).filter((item) => item.path),
+      count: Number(evidence?.count ?? evidenceRefs.length),
+    },
+    risks: {
+      active: activeRisks,
+      activeCount: Array.isArray(risks) ? risks.length : 0,
+    },
+    validation: {
+      status: preflight?.status || 'unknown',
+      failedCount: Number(preflight?.failedCount ?? preflight?.failures?.length ?? 0),
+      warningCount: Number(preflight?.warningCount ?? preflight?.warnings?.length ?? 0),
+    },
+    context: {
+      health: health?.health || 'unavailable',
+      action: health?.action || 'continue-portable-policy',
+      rolloverRequired: Boolean(health?.rolloverRequired),
+      rolloverReason: rolloverReason || (health?.rolloverRequired ? health.action : null),
+    },
+    claimBoundary: 'Continuation aid only; does not prove host dispatch, task creation, subagent execution, external acceptance, registry publication, marketplace approval, or native slash-command support.',
+    sources,
+    retention: {
+      durable: ['stage', 'planUnit', 'acceptance', 'evidence', 'risks', 'validation', 'context', 'claimBoundary', 'sources'],
+      indexed: ['named references', 'check identifiers', 'bounded summaries'],
+      discarded: ['raw conversation history', 'raw tool output', 'full reports', 'successful suite logs', 'duplicate evidence', 'stale diagnostics', 'unselected candidate prose'],
+      counts: { sourcePaths: sources.length, retainedRiskSummaries: activeRisks.length, retainedEvidenceReferences: Math.min(8, evidenceRefs.filter((item) => typeof item === 'string' ? item : item?.path || item?.evidenceFile).length) },
+    },
+  }
+  const estimatedTokens = Math.ceil(JSON.stringify(summary).length / 4)
+  summary.bounds = { maxEstimatedTokens: CONTEXT_BUDGETS.maxToolOutputTokens, estimatedTokens, withinBudget: estimatedTokens <= CONTEXT_BUDGETS.maxToolOutputTokens, maxSourcePaths: 8, maxEvidenceReferences: 8, maxRisks: 3 }
+  return summary
+}
+
 export async function inspectRollout(sessionPath) {
   const report = {
     status: 'ready', sessionPath: path.resolve(sessionPath), sessionId: null, cwd: null,

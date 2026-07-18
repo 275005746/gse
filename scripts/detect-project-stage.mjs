@@ -10,7 +10,6 @@ function readArg(name, fallback = null) {
   return index === -1 ? fallback : args[index + 1] ?? fallback
 }
 
-const root = path.resolve(readArg('--root', path.join(import.meta.dirname, '..')))
 const target = path.resolve(readArg('--target', process.cwd()))
 const intent = readArg('--intent', '')
 const jsonOnly = args.includes('--json')
@@ -105,8 +104,8 @@ const verificationEvidence = testFiles.length > 0 && evidenceFiles.length > 0
 const releaseEvidence = releaseFiles.length > 0 && anyContent(releaseFiles.filter((file) => textExtensions.has(path.extname(file).toLowerCase())), /smoke|rollback|published|deployed|release|回滚|发布/i)
 const stateStage = mappedStatePhase(state?.phase)
 
-let currentStage = 'intake'
-let decision = 'proceed'
+let detectedStage = 'intake'
+let detectedDecision = 'proceed'
 const missingArtifacts = []
 const stageBasis = []
 
@@ -114,49 +113,49 @@ if (stateStage) stageBasis.push(`state phase maps to ${stateStage}`)
 if (implementationEvidence) stageBasis.push(`${sourceFiles.length} implementation file(s) discovered`)
 if (testFiles.length) stageBasis.push(`${testFiles.length} test file(s) discovered`)
 
-if (stateStage === 'intake' && !implementationEvidence) {
-  currentStage = 'intake'
-  missingArtifacts.push('project adoption brief with current assets, constraints, active work, and entry decision')
-} else if (['release', 'learning'].includes(stateStage) && (releaseFiles.length > 0 || evidenceFiles.length > 0)) {
-  currentStage = stateStage
-  if (currentStage === 'release' && !releaseEvidence) missingArtifacts.push('remaining release, smoke, rollback, or publication evidence')
-} else if (!productFraming && !implementationEvidence) {
-  currentStage = 'intake'
+if (!productFraming && !implementationEvidence) {
+  detectedStage = 'intake'
   missingArtifacts.push('project brief with outcome, target user, constraints, and non-goals')
 } else if ((wantsProduct || !implementationEvidence) && !opportunityEvidence && !implementationEvidence) {
-  currentStage = 'opportunity'
+  detectedStage = 'opportunity'
   missingArtifacts.push('opportunity brief with user pain, alternatives, differentiation, success metric, and go/no-go')
 } else if (!requirementEvidence) {
-  currentStage = 'requirements'
-  decision = implementationEvidence ? 'loop_back' : 'proceed'
+  detectedStage = 'requirements'
+  detectedDecision = implementationEvidence ? 'loop_back' : 'proceed'
   missingArtifacts.push('testable requirements with scope, non-goals, workflows, edge cases, and acceptance criteria')
 } else if (wantsUi && !designEvidence) {
-  currentStage = 'design'
-  decision = implementationEvidence ? 'loop_back' : 'proceed'
+  detectedStage = 'design'
+  detectedDecision = implementationEvidence ? 'loop_back' : 'proceed'
   missingArtifacts.push('design direction with selected design inputs and adapted patterns')
   missingArtifacts.push('UX state map covering empty, loading, error, success, and responsive behavior')
 } else if (wantsBackend && !architectureEvidence) {
-  currentStage = 'architecture'
-  decision = implementationEvidence ? 'loop_back' : 'proceed'
+  detectedStage = 'architecture'
+  detectedDecision = implementationEvidence ? 'loop_back' : 'proceed'
   missingArtifacts.push('architecture and contract decision covering boundaries, data flow, risks, and recovery')
 } else if (!planningEvidence && !implementationEvidence) {
-  currentStage = 'planning'
+  detectedStage = 'planning'
   missingArtifacts.push('ordered implementation plan with Definition of Done and evidence per task')
-} else if (implementationEvidence && stateStage === 'implementation') {
-  currentStage = 'implementation'
-  if (!testFiles.length) missingArtifacts.push('focused tests for the active implementation slice')
 } else if (implementationEvidence && !verificationEvidence) {
-  currentStage = testFiles.length ? 'verification' : 'implementation'
+  detectedStage = testFiles.length ? 'verification' : 'implementation'
   missingArtifacts.push(testFiles.length ? 'verification report tied to acceptance criteria' : 'focused tests for the active implementation slice')
   if (wantsUi && !screenshotFiles.length) missingArtifacts.push('browser or screenshot evidence for visible behavior')
 } else if (!releaseEvidence && verificationEvidence) {
-  currentStage = 'release'
+  detectedStage = 'release'
   missingArtifacts.push('release artifact, smoke result, known risks, and rollback or recovery note')
 } else if (releaseEvidence) {
-  currentStage = 'learning'
+  detectedStage = 'learning'
   missingArtifacts.push('operations feedback and reusable learning record')
 }
 
+const approvedStage = stateStage
+const advisoryStage = releaseEvidence
+  ? 'release'
+  : verificationEvidence
+    ? 'verification'
+    : detectedStage
+const stageConflict = Boolean(approvedStage && approvedStage !== advisoryStage)
+const currentStage = approvedStage ?? advisoryStage
+const decision = approvedStage ? 'approved-state-wins' : detectedDecision
 const nextStage = stages[Math.min(stages.indexOf(currentStage) + 1, stages.length - 1)]
 const lifecycle = mapLegacyStage(currentStage)
 const routes = {
@@ -201,6 +200,10 @@ const report = {
   target,
   intent,
   current_stage: currentStage,
+  detected_stage: advisoryStage,
+  approved_stage: approvedStage,
+  stage_decision: decision,
+  stage_conflict: stageConflict,
   lifecycle_stage: lifecycle.stage,
   lifecycle_concern: lifecycle.concern,
   stage_basis: stageBasis.length ? stageBasis : ['repository contains no corroborating lifecycle evidence'],
@@ -210,7 +213,7 @@ const report = {
   evidence_gate: gates[currentStage],
   next_stage: nextStage,
   decision,
-  confidence: stateStage === currentStage || currentStage === 'intake' ? 'high' : 'medium',
+  confidence: approvedStage ? (stageConflict ? 'advisory-conflict' : 'high') : (currentStage === 'intake' ? 'high' : 'medium'),
   risk_flags: [
     ...(wantsUi ? ['ui'] : []),
     ...(wantsBackend ? ['api-or-data'] : []),

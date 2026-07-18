@@ -35,13 +35,6 @@ function slug(value) {
     .replace(/^-+|-+$/g, '') || 'change'
 }
 
-function writeIfMissing(filePath, content) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  if (!force && fs.existsSync(filePath)) return 'skipped'
-  fs.writeFileSync(filePath, content.trimStart().replace(/\n/g, '\r\n'), 'utf8')
-  return fs.existsSync(filePath) ? (force ? 'written-or-overwritten' : 'written') : 'failed'
-}
-
 function createFixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gse-init-change-'))
   fs.mkdirSync(path.join(dir, '.gse'), { recursive: true })
@@ -227,15 +220,21 @@ async function initChange(target) {
   const resolvedTarget = path.resolve(target)
   const changeId = slug(changeIdArg)
   const changeDir = path.join(resolvedTarget, '.gse', 'changes', changeId)
-  const files = [
-    ['brief.md', renderBrief(changeId)],
-    ['spec.md', renderSpec(changeId)],
-    ['design.md', renderDesign(changeId)],
-    ['tasks.md', renderTasks(changeId)],
-    ['evidence.md', renderEvidence(changeId)],
-    ['review.md', renderReview(changeId)],
-    ['execution-quality-pack.md', renderExecutionPack(changeId)],
-  ]
+  const allFiles = {
+    brief: ['brief.md', renderBrief(changeId)],
+    spec: ['spec.md', renderSpec(changeId)],
+    design: ['design.md', renderDesign(changeId)],
+    tasks: ['tasks.md', renderTasks(changeId)],
+    evidence: ['evidence.md', renderEvidence(changeId)],
+    review: ['review.md', renderReview(changeId)],
+    executionQuality: ['execution-quality-pack.md', renderExecutionPack(changeId)],
+  }
+  const fileKeysByLevel = {
+    lite: ['brief', 'evidence'],
+    standard: ['brief', 'spec', 'tasks', 'evidence'],
+    enterprise: ['brief', 'spec', 'design', 'tasks', 'evidence', 'review', 'executionQuality'],
+  }
+  const files = fileKeysByLevel[level].map((key) => allFiles[key])
   const results = files.map(([name]) => ({
     relativePath: path.join('.gse', 'changes', changeId, name).replace(/\\/g, '/'),
     status: force || !fs.existsSync(path.join(changeDir, name)) ? 'written' : 'skipped',
@@ -252,11 +251,29 @@ async function initChange(target) {
   if (!fs.existsSync(statePath)) fs.writeFileSync(statePath, JSON.stringify({ schemaVersion: 1, stateRevision: 0, activeChangeId: null }) + '\n', 'utf8')
   if (writes.length > 0) {
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
+    const nextState = {
+      ...state,
+      activeChangeId: changeId,
+      phase: 'spec',
+      currentSlice: {
+        ...(state.currentSlice ?? {}),
+        id: changeId,
+        status: 'planned',
+      nextAction: level === 'lite'
+        ? 'Implement the smallest verifiable change and record focused evidence.'
+        : 'Execute the change tasks and record evidence.',
+      },
+      currentSummary: `Change ${changeId} specification initialized.`,
+      updatedAt: new Date().toISOString(),
+    }
     const transaction = await executeTransaction({
       target: resolvedTarget,
       operationId: `init-change-${changeId}`,
       expectedRevision: state.stateRevision,
-      writes,
+      writes: [
+        ...writes,
+        { kind: 'json-replace', path: '.gse/state.json', value: nextState },
+      ],
       events: [],
       allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
     })

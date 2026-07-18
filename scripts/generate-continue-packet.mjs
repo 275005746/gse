@@ -15,7 +15,8 @@ import { readHostCapabilities } from './audit-host-capabilities.mjs'
 import { auditToolFallbackPolicy } from './audit-tool-fallback-policy.mjs'
 import { findCanonicalGoalSource } from './canonical-goal-source.mjs'
 import { analyzeCanonicalGoalSourceHygiene } from './document-hygiene.mjs'
-import { CONTEXT_BUDGETS, internalTaskRouting } from './context-health.mjs'
+import { CONTEXT_BUDGETS, buildContextResumeSummary, internalTaskRouting } from './context-health.mjs'
+import { evaluateTaskAdmission } from './task-admission.mjs'
 
 const args = process.argv.slice(2)
 
@@ -669,6 +670,46 @@ function buildShortPrompt({ projectName, resolvedTarget, preflightStatus, compac
   return lines.join('\n')
 }
 
+function buildContinuationPolicy({ state, compactState, failedHardChecks, blockedGates }) {
+  const requestedMode = String(state?.hostContinuationMode || state?.hostCapabilities?.continuationMode || '').trim().toLowerCase()
+  const mode = requestedMode === 'host-autonomous-continuation'
+    ? 'host-autonomous-continuation'
+    : 'host-turn-controlled'
+  const contextRollover = ['orange', 'red'].includes(compactState.contextHealth?.health)
+  const currentStatus = String(compactState.currentSlice?.status || '').toLowerCase()
+  const currentComplete = ['verified', 'accepted', 'complete', 'completed', 'closed', 'archived'].includes(currentStatus)
+  const nextAction = String(compactState.currentSlice?.nextAction || '').trim()
+  const nextSlice = compactState.nextSliceCandidates?.[0] || null
+  const hostLifecycleStatus = String(
+    state?.hostGoalStatus || state?.hostCapabilities?.goalStatus || ''
+  ).trim().toLowerCase()
+  const hostLifecycleStopped = ['cancelled', 'canceled', 'paused', 'ended', 'replaced'].includes(hostLifecycleStatus)
+
+  const stopOutcome = hostLifecycleStopped
+    ? 'blocked'
+    : contextRollover
+      ? 'rollover-required'
+      : failedHardChecks.length > 0
+      ? 'blocked'
+      : blockedGates.length > 0
+        ? 'await-decision'
+        : currentComplete && !nextSlice
+          ? 'top-level-complete'
+          : currentComplete && nextAction
+            ? 'continue-now'
+            : 'continue-now'
+  return {
+    mode,
+    authority: 'host-goal-and-turn-lifecycle',
+    stopOutcome,
+    canAutoContinue: mode === 'host-autonomous-continuation' && stopOutcome === 'continue-now',
+    requiresHostReinjection: mode === 'host-turn-controlled',
+    hostDispatchObserved: false,
+    hostLifecycleStatus: hostLifecycleStatus || 'unknown',
+    claimBoundary: 'GSE continuation is advisory; it does not create, extend, dispatch, or complete a host goal without host evidence.',
+  }
+}
+
 function buildNextSliceMode(state) {
   const status = String(state?.currentSlice?.status ?? '').trim().toLowerCase()
   const verifiedStatuses = new Set(['verified', 'accepted', 'archived', 'closed', 'complete', 'completed'])
@@ -1031,20 +1072,41 @@ function uniqueCandidateReasons(items) {
 
 function buildCandidateActionPacket(candidate) {
   const kind = candidate.kind || 'roadmap-gap'
-  const base = {
+  const outcome = candidate.outcomeHint || 'Open a focused GSE slice that makes the selected gap measurably more true.'
+  const scope = candidate.scopeHint || 'Touch only the scripts, references, templates, and state files needed for this slice.'
+  const acceptance = candidate.acceptanceHint || 'The selected outcome is implemented and its focused proof passes.'
+  const evidence = candidate.evidenceHint || 'Add or update a focused audit, run /gse continue, record evidence, and keep the claim boundary explicit.'
+  const risks = candidate.riskHint || 'Do not turn optional host, release, or project-specific evidence into a default core blocker.'
+  const nextAction = candidate.nextActionHint || 'Update current-slice, state, goal-map, evidence, installed copy, and session sync records when the capability changes.'
+  return {
     candidateType: kind,
-    outcomeHint: candidate.outcomeHint || 'Open a focused GSE slice that makes the selected gap measurably more true.',
-    scopeHint: candidate.scopeHint || 'Touch only the scripts, references, templates, and state files needed for this slice.',
+    outcomeHint: outcome,
+    scopeHint: scope,
     acceptanceHint: candidate.acceptanceHint,
-    evidenceHint: candidate.evidenceHint || 'Add or update a focused audit, run /gse continue, record evidence, and keep the claim boundary explicit.',
-    riskHint: candidate.riskHint || 'Do not turn optional host, release, or project-specific evidence into a default core blocker.',
-    nextActionHint: candidate.nextActionHint || 'Update current-slice, state, goal-map, evidence, installed copy, and session sync records when the capability changes.',
+    evidenceHint: evidence,
+    riskHint: risks,
+    nextActionHint: nextAction,
+    functionalSlice: {
+      outcome,
+      scope,
+      nonGoals: [
+        'Do not create or dispatch a host task.',
+        'Do not claim external acceptance or publication evidence.',
+      ],
+      acceptance,
+      proofBoundary: 'Portable implementation plus focused local verification; host and external claims remain evidence-gated.',
+      evidenceMatrix: [
+        { claim: 'functional outcome', proof: evidence },
+        { claim: 'claim boundary', proof: 'Confirm hostDispatchObserved remains false and external acceptance is unchanged.' },
+      ],
+      risks,
+      nextAction,
+    },
     focusedChecks: candidate.focusedChecks || [
       'node scripts\\audit-continue-preflight.mjs --root . --json',
       'node scripts\\run-validation-profile.mjs --target . --profile lite --json',
     ],
   }
-  return base
 }
 
 function buildNextSliceCandidates(target, state, nextSliceMode, productProgressDrift = null, productOutcomeGate = null, projectName = 'project') {
@@ -1059,7 +1121,6 @@ function buildNextSliceCandidates(target, state, nextSliceMode, productProgressD
     ...extractBulletsFromSection(roadmapText, '## Final Form Priorities'),
   ].filter((item) => item && !/^Done:/i.test(item) && !isHostNativeOnlyCandidate(item))
   const goalMapNext = firstMatch(goalMapText, /Next action:\s*([^\n]+)/i)
-  const goalMapRole = /execution projection/i.test(goalMapText) ? 'execution projection only' : 'projection required'
 
   const candidates = []
   const firstReason = goalMapNext ? fullCandidateReason(goalMapNext) : currentNextAction
@@ -1186,7 +1247,7 @@ function buildNextSliceCandidates(target, state, nextSliceMode, productProgressD
     })
 }
 
-function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks, blockedGates }) {
+function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks, blockedGates, taskAdmissionInput = {} }) {
   const firstCandidate = compactState.nextSliceCandidates?.[0] || null
   const hasHardFailure = failedHardChecks.length > 0
   const hasClaimGate = blockedGates.length > 0
@@ -1243,6 +1304,11 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
     ? firstCandidate.taskRouting
     : internalTaskRouting(routingActionKind, activePlanUnitId)
 
+  const taskAdmission = evaluateTaskAdmission({
+    routing: taskRouting,
+    ...taskAdmissionInput,
+  })
+
   return {
     mode: 'no-goal-mode',
     intent: 'Use this packet when the user says continue in an ordinary chat session without Codex Goal Mode or another host scheduler.',
@@ -1250,6 +1316,7 @@ function buildNoGoalModePacket({ compactState, preflightStatus, failedHardChecks
     canProceed: !hasHardFailure,
     recommendedAction,
     taskRouting,
+    taskAdmission,
     selectedCandidate: shouldOpenNextSlice
       ? {
           id: firstCandidate.id,
@@ -1330,6 +1397,8 @@ function createFixture(options = {}) {
       schemaVersion: 1,
       projectName: 'fixture-product',
       mode: 'standard',
+      hostContinuationMode: options.hostContinuationMode || undefined,
+      hostGoalStatus: options.hostGoalStatus || undefined,
       canonicalGoalSource: 'docs/productization-architecture.md',
       canonicalPlan: 'docs/productization-architecture.md',
       phase: 'execute',
@@ -1386,6 +1455,8 @@ function createFixture(options = {}) {
 async function buildContinuePacket(target) {
   const resolvedTarget = path.resolve(target)
   const gseDir = path.join(resolvedTarget, '.gse')
+  const resumeIndexResult = readJson(path.join(gseDir, 'handoffs', 'context-resume-index.json'))
+  const resumeIndex = resumeIndexResult.ok ? resumeIndexResult.data : null
   const stateResult = readJson(path.join(gseDir, 'state.json'))
   const state = stateResult.ok ? stateResult.data : null
   const evidenceIndex = readJsonl(path.join(gseDir, 'evidence', 'index.jsonl'))
@@ -1652,14 +1723,32 @@ async function buildContinuePacket(target) {
   }
 
   const failedHardChecks = checks.filter((item) => item.status === 'failed' && item.severity === 'hard')
+  const resumeIndexIsBounded = resumeIndex?.schemaVersion === 1
+    && resumeIndex?.kind === 'gse-context-resume-index'
+    && resumeIndex?.target === resolvedTarget
+    && resumeIndex?.bounds?.withinBudget === true
+    && resumeIndex?.planUnit?.topLevelPlanUnitId === (state?.topLevelPlanUnitId || state?.currentSlice?.topLevelPlanUnitId || (state?.currentSlice?.id ? `slice:${state.currentSlice.id}` : null))
+    && resumeIndex?.planUnit?.currentSlice?.id === (state?.currentSlice?.id ?? null)
   const warningChecks = checks.filter((item) => item.status === 'warning')
-  const preflightStatus = failedHardChecks.length > 0 ? 'failed' : blockedGates.length > 0 || warningChecks.length > 0 ? 'warning' : 'passed'
+  const preflightStatus = failedHardChecks.length > 0 && !resumeIndexIsBounded ? 'failed' : blockedGates.length > 0 || warningChecks.length > 0 || failedHardChecks.length > 0 ? 'warning' : 'passed'
   const latestEvidence = evidenceIndex.records.at(-1) ?? null
   const latestEvidenceLevel = latestEvidence?.evidenceLevel ?? null
   const completionPlan = buildCompletionPlan(resolvedTarget, state, maintenanceSnapshot)
   const gateTaxonomy = buildGateTaxonomy(blockedGates)
   const nextSliceMode = buildNextSliceMode(state)
   const nextSliceCandidates = buildNextSliceCandidates(resolvedTarget, state, nextSliceMode, productProgressDrift, productOutcomeGate, projectName)
+  const currentSlice = {
+    id: state?.currentSlice?.id ?? null,
+    outcome: state?.currentSlice?.outcome || firstMatch(goalMapText, /Active slice:\s*([^\n]+)/i) || 'Read goal map and select the next verifiable slice.',
+    status: state?.currentSlice?.status ?? 'unknown',
+    nextAction: state?.currentSlice?.nextAction || firstMatch(goalMapText, /Next action:\s*([^\n]+)/i) || 'Continue with the smallest verifiable GSE slice.',
+  }
+  const continuationPolicy = buildContinuationPolicy({
+    state,
+    compactState: { currentSlice, nextSliceCandidates, contextHealth },
+    failedHardChecks,
+    blockedGates,
+  })
   const nextChecks = [
     'node scripts/run-gse-command.mjs --target <project-root> --command "/gse doctor" --json',
     ...completionPlan.requiredCloseCommands,
@@ -1674,12 +1763,7 @@ async function buildContinuePacket(target) {
     canonicalPlan,
     canonicalGoalSource: canonicalPlan,
     goalMapRole,
-    currentSlice: {
-      id: state?.currentSlice?.id ?? null,
-      outcome: state?.currentSlice?.outcome || firstMatch(goalMapText, /Active slice:\s*([^\n]+)/i) || 'Read goal map and select the next verifiable slice.',
-      status: state?.currentSlice?.status ?? 'unknown',
-      nextAction: state?.currentSlice?.nextAction || firstMatch(goalMapText, /Next action:\s*([^\n]+)/i) || 'Continue with the smallest verifiable GSE slice.',
-    },
+    currentSlice,
     topRisks,
     riskCount: residualRisks.length,
     activeRiskCount: residualRisks.length,
@@ -1689,6 +1773,7 @@ async function buildContinuePacket(target) {
     blockedGates,
     gateTaxonomy,
     nextSliceMode,
+    continuationPolicy,
     nextSliceCandidates,
     executionPolicy: EXECUTION_POLICY,
     nextChecks,
@@ -1821,7 +1906,57 @@ async function buildContinuePacket(target) {
     preflightStatus,
     failedHardChecks,
     blockedGates,
+    taskAdmissionInput: {
+      hostLifecycleStatus: state?.hostGoalStatus || state?.hostCapabilities?.goalStatus || 'unknown',
+      activePlanUnitIds: state?.activePlanUnitIds || [],
+      workerBudget: {
+        maxTasks: 1,
+        maxWorkers: CONTEXT_BUDGETS.maxParallelWriters,
+        activeTasks: state?.activeTaskCount,
+        activeWorkers: state?.activeWorkerCount,
+      },
+      adapter: {
+        status: state?.hostCapabilities?.taskAdmissionStatus || 'unknown',
+        canCreateTask: state?.hostCapabilities?.canCreateTask === true,
+      },
+    },
   })
+
+  const resumeSummary = resumeIndexIsBounded ? resumeIndex : buildContextResumeSummary({
+    target: resolvedTarget,
+    state,
+    health: contextHealth,
+    projectStage,
+    preflight: {
+      status: preflightStatus,
+      failures: failedHardChecks,
+      warnings: warningChecks,
+    },
+    acceptance: {
+      status: ownerExternalGateSummary?.publicAccepted || preflightStatus,
+      blockedCount: blockedGates.length,
+    },
+    evidence: {
+      latestStatus: latestEvidence?.status,
+      latestLevel: latestEvidenceLevel,
+      references: evidenceIndex.records.slice(-8).map((item) => ({
+        path: item.evidenceFile || item.path,
+        status: item.status,
+        id: item.id || item.checkId,
+      })),
+      count: evidenceIndex.records.length,
+    },
+    risks: residualRisks,
+    sourcePaths: [
+      '.gse/state.json',
+      '.gse/current-slice.md',
+      '.gse/goal-map.md',
+      canonicalPlan,
+      latestEvidence?.evidenceFile,
+    ].filter(Boolean),
+    rolloverReason: contextHealth.rolloverRequired ? contextHealth.action : null,
+  })
+  compactState.resumeSummary = resumeSummary
 
   const prompt = buildShortPrompt({ projectName, resolvedTarget, preflightStatus, compactState, blockedGates, failedHardChecks })
 
@@ -1874,6 +2009,7 @@ function buildCompactJson(report) {
     outputProfile: 'compact',
     status: report.summary.status,
     currentSlice: report.compactState.currentSlice,
+    resumeSummary: report.compactState.resumeSummary,
     taskRouting: noGoalMode.taskRouting,
     recommendedAction: noGoalMode.recommendedAction,
     selectedCandidate: noGoalMode.selectedCandidate
@@ -1888,6 +2024,30 @@ function buildCompactJson(report) {
       : null,
     firstSteps: noGoalMode.firstSteps.slice(0, 3).map((item) => shortText(item, 200)),
     closeCommands: noGoalMode.closeCommands.slice(0, 6),
+    productOutcomeGate: report.compactState.productOutcomeGate
+      ? {
+          status: report.compactState.productOutcomeGate.status,
+          projectType: report.compactState.productOutcomeGate.projectType,
+          sliceType: report.compactState.productOutcomeGate.sliceType,
+          userVisibleDelta: report.compactState.productOutcomeGate.userVisibleDelta,
+          supportSliceBoundary: report.compactState.productOutcomeGate.supportSliceBoundary,
+        }
+      : null,
+    deliveryPackRecommendation: report.compactState.deliveryPackRecommendation
+      ? {
+          status: report.compactState.deliveryPackRecommendation.status,
+          primaryPack: report.compactState.deliveryPackRecommendation.primaryPack,
+          reviewAxes: report.compactState.deliveryPackRecommendation.reviewAxes.slice(0, 6),
+          acceptanceScenarios: report.compactState.deliveryPackRecommendation.acceptanceScenarios.slice(0, 3),
+        }
+      : null,
+    ownerExternalGateSummary: report.ownerExternalGateSummary
+      ? {
+          status: report.ownerExternalGateSummary.status,
+          publicAccepted: report.ownerExternalGateSummary.publicAccepted,
+          pendingGates: report.ownerExternalGateSummary.pendingGates,
+        }
+      : null,
     contextHealth: {
       health: report.compactState.contextHealth.health,
       action: report.compactState.contextHealth.action,
@@ -1898,7 +2058,7 @@ function buildCompactJson(report) {
     failures: report.preflight.failures.slice(0, 4).map(compactCheck),
     warnings: report.preflight.warnings.slice(0, 4).map(compactCheck),
     topRisks: report.compactState.topRisks.slice(0, 3).map((item) => shortText(item, 180)),
-    prompt: shortText(report.prompt, 1200),
+    prompt: `${shortText(report.prompt, 900)} pack=${report.compactState.deliveryPackRecommendation?.primaryPack || 'none'}`,
   }
   const budget = CONTEXT_BUDGETS.maxToolOutputTokens
   const initialTokens = Math.ceil(JSON.stringify(compact).length / 4)
@@ -2038,6 +2198,8 @@ function renderDoctorMarkdown(report) {
 }
 
 const target = selfTest ? createFixture({
+  hostContinuationMode: args.includes('--autonomous-host-fixture') ? 'host-autonomous-continuation' : undefined,
+  hostGoalStatus: args.includes('--cancelled-host-fixture') ? 'cancelled' : undefined,
   invalidEvidence: args.includes('--invalid-evidence-fixture'),
   verifiedSlice: args.includes('--verified-slice-fixture'),
 }) : targetArg

@@ -120,7 +120,33 @@ const autoExpectations = [
       )
     },
   },
+  {
+    name: 'single-host-adapter',
+    expectedMode: 'lite',
+    setup(target) {
+      fs.mkdirSync(path.join(target, '.claude'), { recursive: true })
+    },
+  },
 ]
+
+const changeTierExpectations = {
+  lite: ['brief.md', 'evidence.md'],
+  standard: ['brief.md', 'spec.md', 'tasks.md', 'evidence.md'],
+  enterprise: ['brief.md', 'spec.md', 'design.md', 'tasks.md', 'evidence.md', 'review.md', 'execution-quality-pack.md'],
+}
+
+function auditChangeTiers(tempRoot) {
+  const checks = []
+  for (const [level, expected] of Object.entries(changeTierExpectations)) {
+    const target = path.join(tempRoot, 'change-' + level)
+    const run = runNode(path.join(root, 'scripts', 'init-change.mjs'), ['--target', target, '--level', level, '--change-id', 'tier-check', '--json'])
+    const report = readJsonFromRun(run)
+    const actual = (report?.results ?? []).map((item) => item.relativePath.split('/').pop())
+    const ok = run.status === 0 && report?.summary?.total === expected.length && JSON.stringify(actual) === JSON.stringify(expected)
+    checks.push({ level, status: ok ? 'passed' : 'failed', expected, actual, runStatus: run.status })
+  }
+  return { status: checks.every((item) => item.status === 'passed') ? 'passed' : 'failed', checks }
+}
 
 function runNode(script, runArgs) {
   return spawnSync(process.execPath, [script, ...runArgs], {
@@ -296,9 +322,10 @@ fs.mkdirSync(baseTemp, { recursive: true })
 
 const modes = Object.keys(modeExpectations).map((mode) => auditMode(mode, baseTemp))
 const autoModes = autoExpectations.map((item) => auditAuto(item, baseTemp))
+const changeTiers = auditChangeTiers(baseTemp)
 const passed = modes.filter((item) => item.status === 'passed').length
 const autoPassed = autoModes.filter((item) => item.status === 'passed').length
-const failed = modes.length - passed + (autoModes.length - autoPassed)
+const failed = modes.length - passed + (autoModes.length - autoPassed) + (changeTiers.status === 'passed' ? 0 : 1)
 const report = {
   root,
   generatedAt: new Date().toISOString(),
@@ -308,6 +335,7 @@ const report = {
     bootstrapScaffold: modes.every((item) => item.fileChecks.every((check) => check.status === 'present') && item.dirChecks.every((check) => check.status === 'present')) ? 'verified' : 'failed',
     rerunSafety: modes.every((item) => item.changedOnRerun.length === 0 && item.secondRun.skippedCount === item.secondRun.expectedSkips) ? 'verified' : 'failed',
     autoModeSelection: autoModes.every((item) => item.status === 'passed') ? 'verified' : 'failed',
+    changeArtifactTiers: changeTiers.status === 'passed' ? 'verified' : 'failed',
   },
   limits: [
     'Project audit uses temporary directories and generated scaffolds, not arbitrary real repositories.',
@@ -316,6 +344,7 @@ const report = {
   ],
   modes,
   autoModes,
+  changeTiers,
 }
 
 if (!keepTemp) fs.rmSync(baseTemp, { recursive: true, force: true })

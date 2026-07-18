@@ -63,20 +63,27 @@ function detectMode() {
   const reasons = []
 
   const enterpriseSignals = [
+    ['release workflow', exists('release.md') || exists('CHANGELOG.md') || Boolean(scripts.release || scripts.deploy || scripts['release:dry-run'])],
+    ['multiple app/package directories', topLevelDirs.filter((name) => ['apps', 'packages', 'services', 'workers'].includes(name)).length >= 2],
+  ].filter(([, ok]) => ok)
+  const supportingSignals = [
     ['.mcp.json', exists('.mcp.json')],
     ['.claude/', exists('.claude')],
     ['.codex/', exists('.codex')],
     ['.agents/', exists('.agents')],
     ['hooks/', exists('hooks') || exists('.gse/hooks')],
     ['plugins/', exists('plugins') || exists('.gse/plugins')],
-    ['release workflow', exists('release.md') || exists('CHANGELOG.md') || Boolean(scripts.release || scripts.deploy || scripts['release:dry-run'])],
-    ['multiple app/package directories', topLevelDirs.filter((name) => ['apps', 'packages', 'services', 'workers'].includes(name)).length >= 2],
   ].filter(([, ok]) => ok)
 
   if (enterpriseSignals.length > 0) {
     reasons.push(...enterpriseSignals.map(([label]) => label))
     return { mode: 'enterprise', reasons }
   }
+  if (supportingSignals.length >= 3) {
+    reasons.push(...supportingSignals.map(([label]) => label))
+    return { mode: 'enterprise', reasons }
+  }
+  if (supportingSignals.length > 0) reasons.push(...supportingSignals.map(([label]) => label))
 
   const standardSignals = [
     ['package.json', Boolean(pkg)],

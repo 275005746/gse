@@ -65,8 +65,8 @@ node "$GSE_SKILL_ROOT/scripts/inspect-gse-v1-migration.mjs" --target "$PROJECT_R
 | `/gse frame [intent]` | Frame the current project through discovery and the first unmet gate | Five-stage compatibility facade | current request, project rules, repository artifacts, optional `.gse` state | current-stage detection output |
 | `/gse specify [change-id]` | Preview the native Change pack by default; write only with runner-level `--execute` | Five-stage compatibility facade | change id, level, project state | Change preview or created pack inspection |
 | `/gse build` | Generate the continuation packet for the accepted active Change without executing implementation commands | Five-stage compatibility facade | active Change, project state, evidence index | continuation packet inspection |
-| `/gse init` | Initialize `.gse/` in a new project | Project bootstrap | project rules, `project-bootstrap.md` | scaffold file check |
-| `/gse adopt` | Adopt GSE in an existing project without overwriting local rules | Project adoption | project rules, `adoption-recipes.md`, `project-profile.md` | discovery or adoption smoke |
+| `/gse init` | Preview initialization by default; create the `.gse/` scaffold only with runner-level `--execute` | Project bootstrap | project rules, mode, `project-bootstrap.md` | public CLI preview/execute smoke plus scaffold check |
+| `/gse adopt` | Preview missing GSE artifacts by default; create only missing artifacts with runner-level `--execute` while preserving existing project rules and `.gse/` content | Project adoption | project rules, mode, `adoption-recipes.md`, `project-profile.md` | public CLI preview/execute preservation smoke |
 | `/gse continue` | Continue the current project through a hard preflight and compact state packet; use `--brief` for normal takeover and `--doctor`/`--full` for deep diagnostics | Execute workflow | project rules, `.gse/state.json`, evidence index, `.gse/project-profile.md`, canonical product goal source, `.gse/goal-map.md` execution projection, quality gates | continue preflight plus focused test/smoke for the slice |
 | `/gse context` | Inspect host context pressure, goal payload size, and tool-output pressure; optionally generate a bounded checkpoint | Context orchestration | target root and optional Codex rollout path/id | context orchestrator fixture audit; host rollout evidence remains host-specific |
 | `/gse stage [intent]` | Detect the current lifecycle stage, first unmet gate, bounded reference pack, role route, and next stage | Stage orchestration | current request, project rules, repository artifacts, optional `.gse` state | stage orchestrator fixture audit plus direct evidence inspection |
@@ -83,7 +83,7 @@ node "$GSE_SKILL_ROOT/scripts/inspect-gse-v1-migration.mjs" --target "$PROJECT_R
 | `/gse public-release` | Dry-run or generate the ordered public release checklist for owner execution | Public release checklist workflow | release status manifest and pending owner/external gates | public release checklist audit |
 | `/gse maintenance` | Audit recurring maintenance coverage for gap detection, drift, security, forward-test, target drills, public acceptance, and installed sync | Maintenance workflow | `maintenance-cadence.md`, validation profile, current final-form state | maintenance cadence audit |
 | `/gse change` | Create or normalize a GSE change spec pack | Spec workflow | change id, task level, goal map | change folder structure check |
-| `/gse slice` | Define or normalize outcome, scope, acceptance, evidence, risk, and next action | Spec workflow | `goal-map.md`, `spec-workflow.md`, `quality-gates.md` | structural check |
+| `/gse slice` | Normalize a functional Slice contract: outcome, scope, non-goals, acceptance, proof boundary, evidence matrix, evidence, risks, and one verifiable next action; reject mechanical implementation steps and report missing values without writing state | Spec workflow | command fields, current slice, state, `goal-map.md`, `quality-gates.md` | functional proof-boundary public CLI structural check |
 | `/gse verify` | Run the smallest verification that proves the current slice | Verification gate | `quality-gates.md`, project profile, evidence taxonomy | focused test/API/browser smoke |
 | `/gse learn` | Record a reusable lesson in `.gse/learnings.md`; with `--promote`, classify repeated lessons into promotion candidates | Learning workflow | summary, trigger, source, optional impact, optional `--promote` | learning command and promotion audits |
 | `/gse audit` | Check workflow drift, stale claims, missing evidence, or too-heavy process | Audit workflow | `benchmark-audit.md`, `drift-audit.md`, project profile | audit script or checklist |
@@ -210,15 +210,36 @@ node <gse-skill>/scripts/update-project-state.mjs --target <project-root>
 ```
 
 ```text
+/gse help
 /gse init --mode standard
+/gse init --mode standard --execute
+/gse adopt --mode standard
+/gse adopt --mode standard --execute
 ```
 
 Expected behavior:
 
-1. Inspect existing project rules first.
-2. Create `.gse/` if missing.
-3. Preserve existing project-specific rules.
-4. Run a scaffold or structure check.
+1. `/gse help` renders the same authoritative registry used for dispatch and works outside a GSE project. Unsupported verbs return `unknown-command`, a non-zero status, and `/gse help` guidance.
+2. `/gse init` previews mode, target, and the write boundary without creating `.gse/`. Add runner-level `--execute` to initialize the scaffold.
+3. `/gse adopt` first audits the target, lists existing and missing GSE artifacts, identifies preserved project files, and stays read-only by default.
+4. `/gse adopt --execute` composes `init-project.mjs` and `audit-target-project.mjs`, creates only missing artifacts, and preserves existing project rules and `.gse/` files.
+5. `--force` is a separate runner-level overwrite authorization. `--execute` authorizes writes but does not authorize replacing existing output or project artifacts.
+6. Discovered scripts and configuration remain `documented` until their commands are executed.
+
+```text
+/gse slice
+/gse slice --outcome "Ship public commands" --scope "CLI routing" --non-goals "No publication" --acceptance "Focused audit passes" --evidence "Command audit" --risks "Overwrite risk" --next-action "Run Lite validation"
+```
+
+Expected behavior:
+
+1. Return `outcome`, `scope`, `nonGoals`, `acceptance`, `proofBoundary`, `evidenceMatrix`, `evidence`, `risks`, and `nextAction` on every run.
+2. Treat `acceptance` and `proofBoundary` as an independently verifiable functional capability; internal types, call sites, tests, and state transitions remain implementation steps inside that Slice unless they independently establish a user-visible, production, security, migration, safety, route, API, persistence, or integration boundary.
+3. Require `nextAction` to name one clear, verifiable behavior rather than a generic implementation step or open-ended continuation request.
+4. Resolve explicit command fields first, then existing `.gse/current-slice.md` and `.gse/state.json` values when available. Explicit new Slice arguments must not inherit `proofBoundary` or `evidenceMatrix` from the current Slice.
+5. Return absent values as `null` and list them in `missingFields`; do not fabricate requirements or treat a mechanical implementation packet as ready.
+6. Report source availability for state, current slice, goal map, quality gates, and command arguments.
+7. Stay read-only even when runner-level `--execute` is present.
 
 ```text
 /gse change add-user-login --level standard
@@ -363,7 +384,8 @@ Expected behavior:
 2. Accept `--source <package-dir>` or `--source-url <file-or-http-package-url>`.
 3. Use `--install-target <install-skill-dir>` for the destination so it does not conflict with the command runner's own `--target <gse-root>`.
 4. Only write the install target when the command is run with `--execute`.
-5. Keep the output as local or URL-shaped installability evidence. It does not publish to a registry, approve a marketplace listing, or prove global host installation.
+5. Preserve existing install-target files by default. Add runner-level `--force` only when overwriting those files is explicitly authorized; `--execute` alone is not overwrite approval.
+6. Keep the output as local or URL-shaped installability evidence. It does not publish to a registry, approve a marketplace listing, or prove global host installation.
 
 ```text
 /gse public-release

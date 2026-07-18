@@ -19,6 +19,7 @@ const commandText = readArg('--command', args.find((item) => item.startsWith('/g
 const jsonOnly = args.includes('--json')
 const execute = args.includes('--execute')
 const compactOutput = args.includes('--compact')
+const force = args.includes('--force') || /(?:^|\s)--force(?:\s|$)/.test(commandText)
 
 function readJson(relativePath) {
   const fullPath = path.join(target, relativePath)
@@ -28,6 +29,12 @@ function readJson(relativePath) {
   } catch {
     return null
   }
+}
+
+function readText(relativePath) {
+  const fullPath = path.join(target, relativePath)
+  if (!fs.existsSync(fullPath)) return ''
+  return fs.readFileSync(fullPath, 'utf8').replace(/^\uFEFF/, '')
 }
 
 function exists(relativePath) {
@@ -79,6 +86,43 @@ function readRestValue(items, name, fallback = '') {
     values.push(item)
   }
   return values.join(' ').replace(/^["']|["']$/g, '').trim() || fallback
+}
+
+function parsedStdout(result) {
+  try {
+    return JSON.parse(result?.stdout ?? '')
+  } catch {
+    return null
+  }
+}
+
+function resultFromPayload(command, payload, { ok = true, stderr = '' } = {}) {
+  return {
+    command,
+    status: ok ? 0 : 1,
+    ok,
+    diagnosticSummary: {
+      status: ok ? 'passed' : 'failed',
+      failed: ok ? 0 : 1,
+      total: 1,
+    },
+    stdout: JSON.stringify(payload, null, 2),
+    stderr,
+  }
+}
+
+function markdownSection(markdown, heading) {
+  const lines = markdown.split(/\r?\n/)
+  const expected = `## ${heading}`.toLowerCase()
+  const headingIndex = lines.findIndex((line) => line.trim().toLowerCase() === expected)
+  if (headingIndex === -1) return ''
+  const section = []
+  for (let index = headingIndex + 1; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index])) break
+    const value = lines[index].replace(/^\s*[-*]\s*/, '').trim()
+    if (value) section.push(value)
+  }
+  return section.join(' ')
 }
 
 const normalized = normalizeCommand(commandText)
@@ -240,12 +284,151 @@ const commandMap = {
   },
 }
 
-const route = commandMap[verb] ?? commandMap.help
+const knownCommand = Object.hasOwn(commandMap, verb)
+const route = knownCommand ? commandMap[verb] : null
 let execution = null
 
-if (execute && verb === 'init') {
+if (!knownCommand) {
+  execution = resultFromPayload(
+    'resolve GSE command',
+    {
+      status: 'unknown-command',
+      command: normalized,
+      verb,
+      message: `Unknown GSE command: ${verb}`,
+      help: '/gse help',
+      availableCommands: Object.keys(commandMap).map((name) => `/gse ${name}`),
+    },
+    { ok: false, stderr: `Unknown GSE command: ${verb}` },
+  )
+} else if (verb === 'help') {
+  const commands = Object.entries(commandMap).map(([name, definition]) => ({
+    command: `/gse ${name}`,
+    effect: definition.effect,
+    summary: definition.summary,
+    route: definition.route,
+  }))
+  execution = resultFromPayload('render GSE command registry', {
+    status: 'ready',
+    title: 'GSE Commands',
+    commands,
+    entryFiles: ['SKILL.md', 'references/commands.md'],
+  })
+} else if (verb === 'init') {
   const mode = rest.includes('--mode') ? rest[rest.indexOf('--mode') + 1] : 'auto'
-  execution = runNode('init-project.mjs', ['--target', target, '--mode', mode, '--json'])
+  const initArgs = ['--target', target, '--mode', mode, '--json']
+  if (force) initArgs.push('--force')
+  execution = execute
+    ? runNode('init-project.mjs', initArgs)
+    : resultFromPayload('preview init-project.mjs', {
+        status: 'preview',
+        target,
+        mode,
+        writes: { performed: false, requiresExecute: true },
+      })
+} else if (verb === 'adopt') {
+  const mode = rest.includes('--mode') ? rest[rest.indexOf('--mode') + 1] : 'auto'
+  const expectedArtifacts = [
+    '.gse/state.json',
+    '.gse/evidence/index.jsonl',
+    '.gse/README.md',
+    '.gse/project-profile.md',
+    '.gse/goal-map.md',
+    '.gse/quality-gates.md',
+    '.gse/project-guards.md',
+    '.gse/tooling.md',
+    '.gse/host-capabilities.md',
+    '.gse/learnings.md',
+  ]
+  const existingArtifacts = expectedArtifacts.filter((item) => exists(item))
+  const missingArtifacts = expectedArtifacts.filter((item) => !exists(item))
+  const preservedProjectFiles = ['AGENTS.md', 'CLAUDE.md', 'README.md', 'package.json']
+    .filter((item) => exists(item))
+  const beforeAudit = runNode('audit-target-project.mjs', ['--target', target, '--json'])
+  if (!execute) {
+    execution = resultFromPayload('preview GSE adoption', {
+      status: 'preview',
+      target,
+      mode,
+      readiness: parsedStdout(beforeAudit),
+      proposedWrites: missingArtifacts,
+      preservedArtifacts: existingArtifacts,
+      preservedProjectFiles,
+      conflicts: [],
+      writes: { performed: false, requiresExecute: true },
+      evidenceBoundary: 'Discovered project configuration remains documented until its commands are executed.',
+    })
+  } else {
+    const initArgs = ['--target', target, '--mode', mode, '--json']
+    if (force) initArgs.push('--force')
+    const adoption = runNode('init-project.mjs', initArgs)
+    const afterAudit = adoption.ok
+      ? runNode('audit-target-project.mjs', ['--target', target, '--json'])
+      : null
+    execution = resultFromPayload('adopt GSE with init-project.mjs and audit-target-project.mjs', {
+      status: adoption.ok ? 'adopted' : 'failed',
+      target,
+      mode,
+      force: force,
+      adoption: parsedStdout(adoption),
+      readiness: parsedStdout(afterAudit),
+      proposedWrites: missingArtifacts,
+      preservedArtifacts: force ? [] : existingArtifacts,
+      preservedProjectFiles,
+      conflicts: [],
+      writes: { performed: adoption.ok },
+      evidenceBoundary: 'Discovered project configuration remains documented until its commands are executed.',
+    }, { ok: adoption.ok, stderr: adoption.stderr })
+  }
+} else if (verb === 'slice') {
+  const currentSliceText = readText('.gse/current-slice.md')
+  const stateSlice = state?.currentSlice ?? {}
+  const hasSliceCommandArguments = rest.some((item) => item.startsWith('--'))
+  const fields = {
+    outcome: readRestValue(rest, '--outcome') || stateSlice.outcome || markdownSection(currentSliceText, 'Outcome') || null,
+    scope: readRestValue(rest, '--scope') || markdownSection(currentSliceText, 'Scope') || null,
+    nonGoals: readRestValue(rest, '--non-goals') || markdownSection(currentSliceText, 'Non-goals') || null,
+    acceptance: readRestValue(rest, '--acceptance') || markdownSection(currentSliceText, 'Acceptance') || null,
+    evidence: readRestValue(rest, '--evidence') || markdownSection(currentSliceText, 'Evidence') || markdownSection(currentSliceText, 'Evidence Plan') || null,
+    risks: readRestValue(rest, '--risks') || markdownSection(currentSliceText, 'Risks') || null,
+    nextAction: readRestValue(rest, '--next-action') || stateSlice.nextAction || markdownSection(currentSliceText, 'Next Action') || null,
+    proofBoundary: readRestValue(rest, '--proof-boundary')
+      || (!hasSliceCommandArguments && (stateSlice.proofBoundary || markdownSection(currentSliceText, 'Proof Boundary') || markdownSection(currentSliceText, 'Capability Boundary')))
+      || null,
+    evidenceMatrix: readRestValue(rest, '--evidence-matrix')
+      || (!hasSliceCommandArguments && (stateSlice.evidenceMatrix || markdownSection(currentSliceText, 'Evidence Matrix')))
+      || null,
+  }
+  const missingFields = Object.entries(fields).filter(([, value]) => !value).map(([name]) => name)
+  const boundaryText = `${fields.proofBoundary || ''} ${fields.acceptance || ''}`.toLowerCase()
+  const hasIndependentBoundary = /user[- ]visible|production|security|migration|safety|capability|route|api|persistence|integration/.test(boundaryText)
+  const nextActionParts = String(fields.nextAction || '').split(/\s*(?:;|\n|\band then\b|\bthen\b)\s*/i).filter(Boolean)
+  const contractErrors = [
+    ...missingFields,
+    ...(fields.proofBoundary && !hasIndependentBoundary ? ['proofBoundary must name a user-visible, production, security, migration, or capability boundary'] : []),
+    ...(fields.nextAction && nextActionParts.length > 1 ? ['nextAction must describe one verifiable behavior'] : []),
+  ]
+  execution = resultFromPayload('normalize current GSE slice', {
+    status: contractErrors.length === 0 ? 'ready' : 'needs-input',
+    target,
+    ...fields,
+    contract: {
+      kind: 'functional-proof-boundary',
+      independentAcceptance: hasIndependentBoundary,
+      complete: contractErrors.length === 0,
+      internalStepsBelongToSlice: true,
+    },
+    missingFields,
+    contractErrors,
+    sources: {
+      state: Boolean(state),
+      currentSlice: Boolean(currentSliceText),
+      goalMap,
+      qualityGates,
+      commandArguments: rest.some((item) => item.startsWith('--')),
+    },
+    writes: { performed: false },
+  })
 } else if (verb === 'specify') {
   const changeId = rest.find((item) => !item.startsWith('--')) ?? 'gse-change'
   const level = rest.includes('--level') ? rest[rest.indexOf('--level') + 1] : 'standard'
@@ -471,9 +654,11 @@ if (execute && verb === 'init') {
     const outIndex = rest.indexOf('--out')
     const label = labelIndex === -1 ? 'gse-release-bundle-v1.0.0' : (rest[labelIndex + 1] || 'gse-release-bundle-v1.0.0')
     const out = outIndex === -1 ? path.join(target, '.gse', 'release-bundles', label) : path.resolve(rest[outIndex + 1] || path.join(target, '.gse', 'release-bundles', label))
+    const releaseArgs = ['--root', target, '--label', label, '--out', out]
+    if (force) releaseArgs.push('--force')
     execution = execute
-      ? runNode('generate-release-bundle.mjs', ['--root', target, '--label', label, '--out', out, '--force', '--json'])
-      : runNode('generate-release-bundle.mjs', ['--root', target, '--label', label, '--out', out, '--dry-run', '--json'])
+      ? runNode('generate-release-bundle.mjs', [...releaseArgs, '--json'])
+      : runNode('generate-release-bundle.mjs', [...releaseArgs, '--dry-run', '--json'])
   } else {
     execution = {
       command: 'read target release bundle support',
@@ -495,9 +680,11 @@ if (execute && verb === 'init') {
     const outIndex = rest.indexOf('--out')
     const label = labelIndex === -1 ? 'gse-command-package' : (rest[labelIndex + 1] || 'gse-command-package')
     const out = outIndex === -1 ? path.join(target, '.gse', 'packages', label) : path.resolve(rest[outIndex + 1] || path.join(target, '.gse', 'packages', label))
+    const packageArgs = ['--root', target, '--label', label, '--out', out]
+    if (force) packageArgs.push('--force')
     execution = execute
-      ? runNode('package-gse.mjs', ['--root', target, '--label', label, '--out', out, '--force', '--json'])
-      : runNode('package-gse.mjs', ['--root', target, '--label', label, '--out', out, '--dry-run', '--json'])
+      ? runNode('package-gse.mjs', [...packageArgs, '--json'])
+      : runNode('package-gse.mjs', [...packageArgs, '--dry-run', '--json'])
   } else {
     execution = {
       command: 'read target package support',
@@ -553,8 +740,9 @@ if (execute && verb === 'init') {
       if (publicKey) installArgs.push('--public-key', publicKey)
       if (rest.includes('--skip-integrity')) installArgs.push('--skip-integrity')
       if (rest.includes('--skip-signature')) installArgs.push('--skip-signature')
+      if (force) installArgs.push('--force')
       execution = execute
-        ? runNode('install-gse.mjs', [...installArgs, '--force'])
+        ? runNode('install-gse.mjs', installArgs)
         : runNode('install-gse.mjs', [...installArgs, '--dry-run'])
     }
   } else {
@@ -582,8 +770,9 @@ if (execute && verb === 'init') {
       : path.resolve(rest[outIndex + 1] || path.join(target, '.gse', 'acceptance', 'public-release-checklist.md'))
     const checklistArgs = ['--root', target, '--out', out, '--json']
     if (manifestIndex !== -1) checklistArgs.push('--manifest', path.resolve(rest[manifestIndex + 1] || path.join(target, '.gse', 'acceptance', 'release-status-manifest.json')))
+    if (force) checklistArgs.push('--force')
     execution = execute
-      ? runNode('generate-public-release-checklist.mjs', [...checklistArgs, '--force'])
+      ? runNode('generate-public-release-checklist.mjs', checklistArgs)
       : runNode('generate-public-release-checklist.mjs', [...checklistArgs, '--dry-run'])
   } else {
     execution = {
@@ -643,7 +832,7 @@ const parsedChangeId = (verb === 'specify' || verb === 'change')
   ? (rest.find((item) => !item.startsWith('--')) ?? 'gse-change')
   : null
 const childDiagnostics = execution?.diagnosticSummary
-  ? [{ code: execution.ok ? 'LEGACY_ROUTE_OK' : 'LEGACY_ROUTE_FAILED', field: 'execution' }]
+  ? [{ code: execution.ok ? 'COMMAND_ROUTE_OK' : knownCommand ? 'COMMAND_ROUTE_FAILED' : 'UNKNOWN_COMMAND', field: 'execution' }]
   : []
 const coreResult = createResultEnvelope({
   status: execution?.ok
@@ -652,11 +841,13 @@ const coreResult = createResultEnvelope({
       ? 'repair'
       : 'blocked',
   stage: facadeStage,
-  reasonCode: verb === 'release'
-    ? 'POST_CLOSE_RELEASE'
-    : execution?.ok
-      ? 'READY'
-      : 'LEGACY_ROUTE_FAILED',
+  reasonCode: !knownCommand
+    ? 'UNKNOWN_COMMAND'
+    : verb === 'release'
+      ? 'POST_CLOSE_RELEASE'
+      : execution?.ok
+        ? 'READY'
+        : 'COMMAND_ROUTE_FAILED',
   message: verb === 'release'
     ? 'Release remains a separately authorized post-Close flow.'
     : execution?.ok
@@ -664,7 +855,9 @@ const coreResult = createResultEnvelope({
       : `${verb} route requires attention.`,
   changeId: state?.activeChangeId ?? parsedChangeId,
   stateRevision: state?.stateRevision ?? null,
-  requiredActions: execution?.ok ? [] : ['Inspect the legacy route diagnostics and repair the reported failure.'],
+  requiredActions: execution?.ok
+    ? []
+    : [knownCommand ? 'Inspect the command diagnostics and repair the reported failure.' : 'Run /gse help and choose a supported command.'],
   diagnostics: childDiagnostics,
   safeToRetry: verb !== 'close' || !execution?.ok,
 })
@@ -694,7 +887,7 @@ const report = {
   limits: [
     'This runner executes portable GSE command semantics.',
     'It does not prove a host UI accepted a native slash command unless the host invokes this runner or a host smoke records that behavior.',
-    'Write-capable commands require --execute.',
+    'Write-capable commands require --execute; overwriting existing artifacts also requires explicit --force.',
   ],
 }
 
@@ -705,10 +898,14 @@ if (jsonOnly && compactOutput && execution?.stdout) {
     console.log(execution.stdout)
   }
 } else if (jsonOnly) console.log(JSON.stringify(report, null, 2))
-else {
+else if (verb === 'help' && execution?.stdout) {
+  const help = parsedStdout(execution)
+  console.log(help.title)
+  for (const item of help.commands) console.log(`${item.command} - ${item.summary}`)
+} else {
   console.log('GSE command: ' + report.command)
-  console.log('Route: ' + report.route.route)
-  console.log('Effect: ' + report.route.effect)
+  console.log('Route: ' + (report.route?.route ?? 'unknown-command'))
+  console.log('Effect: ' + (report.route?.effect ?? 'none'))
   console.log('Target: ' + report.target)
 }
 

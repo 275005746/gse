@@ -21,7 +21,7 @@ Inspect in this order:
 3. `.gse/state.json`, `.gse/current-slice.md`, and active change folders when present.
 4. The current request and conversation history.
 
-State is a hint, not proof. Conversation history is a hint, not proof. If state metadata conflicts with verifiable file or runtime evidence, record the conflict and use the evidence-backed stage.
+State is a hint, not proof. Conversation history is a hint, not proof. The deterministic detector is advisory only: it must never overwrite an approved persisted phase, an approved plan, or the active task/slice state. When persisted approved state conflicts with file heuristics, return both values, mark the conflict, and route using the approved state; record the heuristic as an advisory for review. If no approved stage exists, the detector may provide a conservative suggestion, but it still does not authorize lifecycle advancement.
 
 For an existing project, do not restart the lifecycle. Find the first unmet gate that blocks the requested outcome. Preserve valid project artifacts and continue from that stage. An earlier gap may cause `loop_back`; it does not authorize rewriting unrelated project history.
 

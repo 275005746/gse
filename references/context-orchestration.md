@@ -46,6 +46,15 @@ These budgets protect coordinator headroom. They do not claim lower total token 
 - Worker routing is a recommendation, not dispatch evidence. A role or `one-bounded-worker` recommendation remains `not-observed` until the host supplies real dispatch evidence.
 
 ## Context Pack
+
+## Durable Resume Index
+
+Checkpoints also maintain `.gse/handoffs/context-resume-index.json` when generated with `--execute`. It is a bounded continuation aid, not a transcript: it keeps the effective stage and advisory conflict, stable `topLevelPlanUnitId`, current slice and next action, acceptance and evidence references, active risks, validation status, context health, claim boundary, and target-contained source paths.
+
+Retention is explicit. Durable fields are needed to resume the same plan unit; indexed fields are named references, check identifiers, and bounded summaries; raw conversation history, raw tool output, full reports, successful suite logs, duplicate evidence, stale diagnostics, and unselected candidate prose are discarded. Retrieval remains limited to three cycles and returns selected fields or bounded excerpts only. The index never proves host dispatch, task creation, subagent execution, external acceptance, registry publication, marketplace approval, or native slash-command support.
+
+`generate-context-checkpoint.mjs` remains dry-run by default. Only `--execute` writes the markdown handoff and resume index.
+
 ## Tool Output Policy
 
 Use summary-first commands before requesting detail:

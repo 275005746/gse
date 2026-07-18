@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "name": "gse",
   "displayName": "GSE",
-  "tagline": "Goal-Spec-Evidence Engineering for long-running agentic software projects.",
-  "summary": "Goal-Spec-Evidence workflow skill for AI coding agents that turns ad hoc development into goal maps, scoped specs, focused execution, evidence gates, and reusable learning.",
+  "tagline": "A portable Agent Skill and CLI for long-running software work across sessions.",
+  "summary": "GSE helps AI coding agents discover the current project state, implement complete functional Slices, continue under one Plan Unit, and distinguish local verification from external acceptance.",
   "categories": [
     "agent workflow engineering",
     "software development workflow",

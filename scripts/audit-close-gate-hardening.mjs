@@ -92,7 +92,7 @@ async function createProject(label, options = {}) {
     currentSlice: {
       id: changeId,
       outcome: 'Fixture close gate hardening.',
-      status: 'verified',
+      status: options.currentSliceStatus ?? 'verified',
       nextAction: 'Close fixture.',
     },
     toolStatuses: {
@@ -134,9 +134,9 @@ async function createProject(label, options = {}) {
         changeId,
         taskId: null,
         stateRevision: 2,
-        status: 'verified',
-        evidenceLevel: 'verified-unit',
-        requiredEvidenceLevel: 'verified-unit',
+        status: options.evidenceStatus ?? 'verified',
+        evidenceLevel: options.evidenceLevel ?? 'verified-unit',
+        requiredEvidenceLevel: options.requiredEvidenceLevel ?? 'verified-unit',
         summary: 'Fixture close gate hardening evidence.',
         claim: 'Fixture close gate hardening evidence.',
         evidenceClass: 'test',
@@ -184,17 +184,23 @@ write(path.join(dirtyDir, 'src', 'changed.txt'), 'dirty fixture\n')
 const generatedDir = await createProject('generated')
 write(path.join(generatedDir, 'output', 'playwright', 'screen.png'), 'generated artifact\n')
 run('git', ['add', 'output/playwright/screen.png'], generatedDir)
+const lifecyclePlannedDir = await createProject('lifecycle-planned', { currentSliceStatus: 'planned', evidenceStatus: 'verified', evidenceLevel: 'verified-integration', requiredEvidenceLevel: 'verified-integration' })
+const evidencePlannedDir = await createProject('evidence-planned', { currentSliceStatus: 'verified', evidenceStatus: 'planned', evidenceLevel: 'verified-integration', requiredEvidenceLevel: 'verified-integration' })
 
 const cleanReport = parseReport(runNode('audit-close-gate.mjs', ['--target', cleanDir, '--json']))
 const fakeReport = parseReport(runNode('audit-close-gate.mjs', ['--target', fakeDir, '--json']))
 const dirtyReport = parseReport(runNode('audit-close-gate.mjs', ['--target', dirtyDir, '--json']))
 const generatedReport = parseReport(runNode('audit-close-gate.mjs', ['--target', generatedDir, '--json']))
+const lifecyclePlannedReport = parseReport(runNode('audit-close-gate.mjs', ['--target', lifecyclePlannedDir, '--json']))
+const evidencePlannedReport = parseReport(runNode('audit-close-gate.mjs', ['--target', evidencePlannedDir, '--json']))
 
 const checks = [
   check('CGH01', 'clean fixture close gate is ready with honest role fallback', cleanReport.summary?.status === 'ready' && getCheck(cleanReport, 'CG10')?.status === 'passed' && getCheck(cleanReport, 'CG11')?.status === 'passed' && getCheck(cleanReport, 'CG12')?.status === 'passed', 'clean close gate fixture'),
   check('CGH02', 'fake real-subagent claim fails close gate', fakeReport.summary?.status === 'not-ready' && getCheck(fakeReport, 'CG10')?.status === 'failed', getCheck(fakeReport, 'CG10')?.evidence ?? 'missing CG10'),
   check('CGH03', 'dirty worktree is surfaced and invalidates current close evidence', dirtyReport.summary?.status === 'not-ready' && getCheck(dirtyReport, 'CG11')?.status === 'warning' && getCheck(dirtyReport, 'CG16')?.status === 'failed', `${getCheck(dirtyReport, 'CG11')?.evidence ?? 'missing CG11'}; ${getCheck(dirtyReport, 'CG16')?.evidence ?? 'missing CG16'}`),
   check('CGH04', 'staged generated artifacts fail close gate', generatedReport.summary?.status === 'not-ready' && getCheck(generatedReport, 'CG12')?.status === 'failed', getCheck(generatedReport, 'CG12')?.evidence ?? 'missing CG12'),
+  check('CGH05', 'evidence depth cannot substitute for Slice lifecycle status', lifecyclePlannedReport.summary?.status === 'not-ready' && getCheck(lifecyclePlannedReport, 'CG04')?.status === 'failed', getCheck(lifecyclePlannedReport, 'CG04')?.evidence ?? 'missing CG04'),
+  check('CGH06', 'Slice lifecycle status cannot substitute for evidence status', evidencePlannedReport.summary?.status === 'not-ready' && getCheck(evidencePlannedReport, 'CG05')?.status === 'failed', getCheck(evidencePlannedReport, 'CG05')?.evidence ?? 'missing CG05'),
 ]
 
 for (const dir of [cleanDir, fakeDir, dirtyDir, generatedDir]) {

@@ -1,6 +1,101 @@
-# Errors
+---
 
-## [ERR-20260705-001] apply_patch_windowsapps_access_denied
+## [ERR-20260719-001] cleanup-invalid-session-working-directory
+
+**Logged**: 2026-07-19T00:00:00Z
+**Priority**: high
+**Status**: pending
+**Area**: infra
+
+### Summary
+Cleaning the directory that hosted the active session left the shell with an invalid working directory, so Git failed even when invoked with an absolute `-C` path.
+
+### Error
+```text
+fatal: not a git repository: (NULL)
+Shell cwd was reset to D:\codex\tmp\gse-lang-fix
+```
+
+### Context
+- The cleanup removed most of `D:\codex\tmp\gse-lang-fix` while this session still used it.
+- A locked worktree prevented complete deletion.
+- Subsequent commands could access absolute filesystem paths, but Git could not resolve the invalid process cwd.
+
+### Suggested Fix
+Move or reopen the active session from a stable directory before deleting its workspace. Run migration and verification from that stable parent directory.
+
+### Metadata
+- Reproducible: yes
+- Related Files: .learnings/ERRORS.md
+- See Also: none
+
+---
+
+## [ERR-20260718-001] apply_patch_absolute_windows_path_noop
+
+**Logged**: 2026-07-18T00:00:00Z
+**Priority**: high
+**Status**: resolved
+**Area**: config
+
+### Summary
+`apply_patch` accepted a patch containing a Windows absolute path but made no repository change.
+
+### Error
+```text
+apply_patch returned no error, but git diff was empty and the command still returned the old behavior.
+```
+
+### Context
+- Operation attempted: patch `scripts/run-gse-command.mjs` using `D:/...` in the patch header.
+- The patch tool did not apply the absolute-path target.
+- A focused behavior smoke caught the unchanged implementation immediately.
+
+### Suggested Fix
+Run `apply_patch` from the repository root and use repository-relative paths in patch headers. Verify the diff before treating a silent patch command as success.
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/run-gse-command.mjs
+- See Also: ERR-20260705-001
+
+### Resolution
+- **Resolved**: 2026-07-18T00:00:00Z
+- **Notes**: The first absolute-path patch was a no-op; the repository-root retry then showed `apply_patch: command not found`. Stopped retrying the unavailable wrapper and used exact file edits with focused diff/behavior verification.
+
+## [ERR-20260718-002] continue-handoff-focused-audit-baseline-failures
+
+**Logged**: 2026-07-18T15:35:27Z
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+The focused continue audit still reports four pre-existing GSE-self baseline failures while the new functional Slice handoff contract passes.
+
+### Error
+```text
+CPF06 compact mode returns packet without wrapper diagnostics
+CPF08 GSE self continue surfaces final acceptance status without treating optional host-native claims as blocked gates
+CPF29 GSE self is not forced through product outcome gate
+CPF34 continue packet exposes delivery-pack recommendation with review and acceptance hints
+```
+
+### Context
+- Operation: `node scripts/audit-continue-preflight.mjs --root <target> --json`
+- New checks CPF24 and CPF24a passed, including bounded functionalSlice fields.
+- Failures are against the existing self/fixture expectations and are not caused by the new action-packet contract.
+
+### Suggested Fix
+Investigate the GSE-self fixture and compact wrapper expectations separately; do not weaken the new functional Slice proof-boundary assertion to accommodate unrelated baseline drift.
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/audit-continue-preflight.mjs, scripts/generate-continue-packet.mjs
+
+---
+
+
 
 **Logged**: 2026-07-05T00:00:00+08:00
 **Priority**: high
@@ -127,9 +222,9 @@ Before retrying a structured tool call, compare the supplied numeric argument wi
 - **Notes**: Corrected the offset to 520 and retrieved the required section.
 
 ### Recurrence
-- **Last-Seen**: 2026-07-17
-- **Recurrence-Count**: 8
-- **Notes**: The malformed offset pattern recurred twice while inspecting `audit-close-gate.mjs` (2200 and 57000 for a 604-line file). Offset-based Read is prohibited for this file; use full-file Read or Grep context only.
+- **Last-Seen**: 2026-07-18
+- **Recurrence-Count**: 27
+- **Notes**: The malformed offset pattern recurred while reading transaction and command-audit sources. Use LSP first for symbol navigation. Read offsets are one-based file line numbers; omit `offset` for whole-file reads and never reuse generated/token-position numbers or append digits to line offsets.
 
 ---
 
@@ -614,5 +709,169 @@ Use the repository runtime (Node.js) for the bounded JSON extraction and print o
 ### Metadata
 - Reproducible: unknown
 - Related Files: scripts/validate-gse.mjs
+
+---
+
+## [ERR-20260718-002] installed_command_envelope_route_shape
+
+**Logged**: 2026-07-18T00:00:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The installed tarball audit treated the public command envelope's structured `route` field as a string.
+
+### Error
+```text
+NTI08 failed although init exited 0, created valid state, and preserved the project sentinel.
+```
+
+### Context
+- `scripts/run-gse-command.mjs` returns `route` metadata as an object with `route`, `effect`, and `summary` fields.
+- The audit also expected the first initialization result status to be `created`; `init-project.mjs` reports that successful first write as `written`.
+- The audit asserted `initData.route === 'scripts/init-project.mjs'` instead of checking `initData.route.route`.
+
+### Suggested Fix
+Inspect and validate public envelopes at their documented nesting level; keep execution payload assertions separate from route metadata assertions.
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/audit-npm-tarball-install.mjs
+
+### Resolution
+- **Resolved**: 2026-07-18T00:00:00Z
+- **Notes**: Updated NTI08 to validate `route.route` while retaining state creation and sentinel preservation requirements.
+
+---
+
+---
+
+## [ERR-20260718-003] prompt_degradation_research_agent_timeout
+
+**Logged**: 2026-07-18T00:00:00Z
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+The read-only research agent timed out before returning findings about prompt budgets and upstream 422 degradation.
+
+### Error
+API Error: The operation timed out.
+
+### Context
+- Operation attempted: locate prompt/token budget, HTTP 422 handling, bounded retry/degradation, taskCreationIntent, and five-field report implementation.
+- No repository changes were made by the agent.
+
+### Suggested Fix
+Use local LSP and targeted repository searches when a research agent is unavailable; do not infer missing capability from an agent timeout.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: scripts/generate-continue-packet.mjs, scripts/context-health.mjs
+
+---
+
+## [ERR-20260719-002] release-audit-ref-and-read-offset
+
+**Logged**: 2026-07-19T00:00:00Z
+**Priority**: high
+**Status**: resolved
+**Area**: infra
+
+### Summary
+Release audit used a missing local default-branch ref and repeatedly passed out-of-range line offsets to `Read`.
+
+### Error
+```text
+fatal: ambiguous argument 'main...HEAD': unknown revision or path not in the working tree.
+Warning: the file exists but is shorter than the provided offset. The file has 775 lines.
+```
+
+### Context
+- `git log main...HEAD` assumed a local `main`, while only `origin/main` existed.
+- `Read.offset` received values such as 3500, 6750, and 6500 for a 775-line file and unchanged failures were retried.
+- An empty-string `Edit` anchor was also rejected when attempting to append this record.
+
+### Suggested Fix
+Resolve the actual default-branch ref before comparisons. For reads, use Grep line numbers or omit the offset; after an out-of-range error, never reuse the malformed value. Append with a unique tail anchor rather than an empty string.
+
+### Metadata
+- Reproducible: yes
+- Related Files: .learnings/ERRORS.md
+- See Also: ERR-20260717-001, ERR-20260717-008
+
+### Resolution
+- **Resolved**: 2026-07-19T00:00:00Z
+- **Notes**: Continued with `origin/main`, used a whole-file read, and appended through a unique tail block.
+
+---
+
+## [ERR-20260719-003] release-metadata-initialization-order
+
+**Logged**: 2026-07-19T00:00:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: tests
+
+### Summary
+A public-release audit referenced `releaseRecord` before its declaration, and a no-op exact replacement was submitted to Edit.
+
+### Error
+```text
+ReferenceError: Cannot access 'releaseRecord' before initialization
+No changes to make: old_string and new_string are exactly the same.
+```
+
+### Context
+- `ownerLicenseAccepted` was moved to use accepted release evidence but placed before `releaseRecord` initialization.
+- A parallel heading edit supplied identical old and new text.
+
+### Suggested Fix
+Keep derived predicates after all source values are initialized, and compare replacement strings before submitting Edit calls.
+
+### Metadata
+- Reproducible: yes
+- Related Files: scripts/audit-public-release-metadata.mjs, README.zh-CN.md
+
+### Resolution
+- **Resolved**: 2026-07-19T00:00:00Z
+- **Notes**: Moved `releaseRecord` initialization before the predicate and skipped further no-op edits.
+
+---
+
+## [ERR-20260719-004] commit-author-identity-and-offset-reuse
+
+**Logged**: 2026-07-19T00:00:00Z
+**Priority**: medium
+**Status**: resolved
+**Area**: infra
+
+### Summary
+The release commit lacked a configured author identity, and the follow-up error-log read reused an invalid offset pattern.
+
+### Error
+```text
+Author identity unknown
+fatal: unable to auto-detect email address
+Warning: the file exists but is shorter than the provided offset. The file has 843 lines.
+```
+
+### Context
+- The repository and global Git configuration did not provide `user.name` or `user.email`.
+- The first log read used an out-of-range offset instead of the known file length.
+
+### Suggested Fix
+Inspect the latest commit author and pass that established identity only to the approved commit process without changing Git configuration. Use a valid tail range after an out-of-range read.
+
+### Metadata
+- Reproducible: yes
+- Related Files: .learnings/ERRORS.md
+- See Also: ERR-20260719-002
+
+### Resolution
+- **Resolved**: 2026-07-19T00:00:00Z
+- **Notes**: Reused the repository's latest author identity for the single commit command and switched to a valid file-tail offset.
 
 ---

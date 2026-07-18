@@ -1,5 +1,28 @@
 # GSE Learnings
 
+## [LRN-20260718-001] cross-repository-validation
+
+**Logged**: 2026-07-18T00:00:00Z
+**Priority**: medium
+**Status**: pending
+**Area**: infra
+
+### Summary
+Cross-repository validation commands must use the target repository path explicitly.
+
+### Details
+The active shell checkout was `gse-lang-fix`, while the implementation target was `gse-recreate-clean-core-foundation`. Running relative Node script paths therefore reported a missing `scripts/task-admission.mjs` even though the target file existed. Re-running with target absolute paths produced the expected audit result.
+
+### Suggested Action
+When working across checkouts, invoke scripts with the target repository absolute path or an explicit command prefix and inspect the target root before validation.
+
+### Metadata
+- Source: error
+- Related Files: scripts/task-admission.mjs
+- Tags: validation, multi-repository
+
+---
+
 ## [LRN-20260707-001] best_practice
 
 **Logged**: 2026-07-07T06:53:48+08:00

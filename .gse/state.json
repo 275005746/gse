@@ -8,16 +8,16 @@
   "currentSummary": {
     "status": "verified",
     "localEngineeringReadiness": 100,
-    "fullFinalFormReadiness": 100,
-    "publicAccepted": "verified",
-    "pendingExternalGate": null,
-    "currentPlan": "GSE-169 verified locally: budget-aware context health, rollover routing, bounded context packs, result capsules, focused audits, and Lite validation are complete."
+    "fullFinalFormReadiness": 88,
+    "publicAccepted": "not-accepted",
+    "pendingExternalGate": 2,
+    "currentPlan": "GSE-172 verified locally; npm 1.2.0 registry publication is accepted. Marketplace approval and other-host runtime evidence remain external-required."
   },
   "currentSlice": {
-    "id": "GSE-169-context-orchestrator",
-    "outcome": "Audit context health and route long-running GSE work through bounded output, worker packets, checkpoints, and rollover.",
+    "id": "GSE-172-cross-session-entrypoint",
+    "outcome": "Make the portable GSE entrypoint usable across sessions without relying on prior conversation history or inferring Host capability.",
     "status": "verified",
-    "nextAction": "Commit, push, create PR, and merge to main."
+    "nextAction": "Select the next independently verifiable functional Slice under the same top-level Plan Unit; keep external acceptance owner-gated."
   },
   "toolStatuses": {
     "browser": "unknown",
@@ -26,25 +26,20 @@
     "subagents": "unknown",
     "ci": "documented"
   },
-  "lastEvidence": ".gse/evidence/2026-07-16.md",
+  "lastEvidence": ".gse/evidence/2026-07-19.md",
   "blockedGates": [],
   "nextChecks": [
-    "node scripts/audit-context-orchestrator.mjs --root . --json",
-    "node scripts/run-gse-command.mjs --root . --target . --command \"/gse doctor\" --json",
-    "node scripts/audit-public-acceptance-readiness.mjs --root . --json",
-    "node scripts/audit-context-health.mjs --target . --session-id 019f65e7-fa54-7f52-a45e-242bcef79d0b --json",
     "node scripts/audit-continue-preflight.mjs --root . --json",
-    "node scripts/audit-commands.mjs --root . --json",
-    "node scripts/audit-capability-execution-matrix.mjs --root . --json",
+    "node scripts/audit-task-admission.mjs --root . --json",
+    "node scripts/audit-context-orchestrator.mjs --root . --json",
     "node scripts/validate-gse.mjs --root . --profile lite --json",
-    "cmd /c npm run check:encoding",
     "git diff --check"
   ],
   "residualRisks": [
-    "GSE can detect host context pressure and prepare rollover, but portable scripts cannot compact a live host session, prevent active-goal reinjection, or create a new Codex task.",
-    "Codex rollout JSONL is host-specific; missing or changed telemetry must degrade to unavailable without overstating health.",
-    "The historical .gse/goal-map.md is a repository ledger and currently triggers goal-payload-risk; active host goals must remain an 8-12 line execution index instead of copying this file.",
-    "Context pack and result capsule budgets protect coordinator headroom; they do not guarantee lower total token cost or prove real subagent execution."
+    "Portable continuation and task admission remain advisory; they cannot create or dispatch a host task or complete a host Goal.",
+    "Registry publication is accepted for npm 1.2.0; marketplace approval, native slash-command evidence, and public acceptance remain separate claims.",
+    "Marketplace and other-host runtime gates remain pending and must be re-audited only after real evidence is attached.",
+    "The historical .gse/goal-map.md is a repository ledger and must not be copied into an active host goal."
   ],
   "riskArchive": [
     {

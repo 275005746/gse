@@ -37,6 +37,28 @@ function npm(commandArgs, cwd = root) {
     : run('npm', commandArgs, cwd)
 }
 
+function runBin(binPath, commandArgs, cwd) {
+  return process.platform === 'win32'
+    ? run('cmd', ['/c', binPath, ...commandArgs], cwd)
+    : run(binPath, commandArgs, cwd)
+}
+
+function snapshotTree(target) {
+  if (!exists(target)) return []
+  const entries = []
+  function visit(current, relative = '') {
+    for (const name of fs.readdirSync(current).sort()) {
+      const fullPath = path.join(current, name)
+      const relativePath = path.join(relative, name).replaceAll('\\', '/')
+      const stat = fs.statSync(fullPath)
+      if (stat.isDirectory()) visit(fullPath, relativePath)
+      else entries.push([relativePath, fs.readFileSync(fullPath, 'base64')])
+    }
+  }
+  visit(target)
+  return entries
+}
+
 function parseJson(text) {
   try {
     return JSON.parse(text)
@@ -89,12 +111,33 @@ const expectedRepositoryUrls = new Set([
 const binPath = process.platform === 'win32'
   ? path.join(consumerRoot, 'node_modules', '.bin', 'gse.cmd')
   : path.join(consumerRoot, 'node_modules', '.bin', 'gse')
-const binRun = exists(binPath)
-  ? process.platform === 'win32'
-    ? run('cmd', ['/c', binPath, 'status', '--target', installedRoot, '--json'], consumerRoot)
-    : run(binPath, ['status', '--target', installedRoot, '--json'], consumerRoot)
-  : { command: binPath + ' status --target ' + installedRoot + ' --json', cwd: consumerRoot, status: 1, stdout: '', stderr: 'bin missing' }
-const binData = parseJson(binRun.stdout)
+const projectRoot = path.join(tempRoot, 'project')
+const projectSentinel = '# Existing Project Rules\n\nPreserve this file.\n'
+fs.mkdirSync(projectRoot, { recursive: true })
+fs.writeFileSync(path.join(projectRoot, 'AGENTS.md'), projectSentinel, 'utf8')
+const missingBinRun = (command) => ({ command: `${binPath} ${command}`, cwd: consumerRoot, status: 1, stdout: '', stderr: 'bin missing' })
+const helpRun = exists(binPath)
+  ? runBin(binPath, ['help', '--target', projectRoot, '--json'], consumerRoot)
+  : missingBinRun('help')
+const helpData = parseJson(helpRun.stdout)
+const helpExecutionData = parseJson(helpData?.execution?.stdout ?? '')
+const beforeInitPreview = snapshotTree(projectRoot)
+const initPreviewRun = exists(binPath)
+  ? runBin(binPath, ['init', '--target', projectRoot, '--mode', 'lite', '--json'], consumerRoot)
+  : missingBinRun('init --mode lite')
+const initPreviewData = parseJson(initPreviewRun.stdout)
+const initPreviewExecutionData = parseJson(initPreviewData?.execution?.stdout ?? '')
+const afterInitPreview = snapshotTree(projectRoot)
+const initRun = exists(binPath)
+  ? runBin(binPath, ['init', '--target', projectRoot, '--mode', 'lite', '--execute', '--json'], consumerRoot)
+  : missingBinRun('init --mode lite --execute')
+const initData = parseJson(initRun.stdout)
+const initExecutionData = parseJson(initData?.execution?.stdout ?? '')
+const statusRun = exists(binPath)
+  ? runBin(binPath, ['status', '--target', projectRoot, '--json'], consumerRoot)
+  : missingBinRun('status')
+const statusData = parseJson(statusRun.stdout)
+const projectSentinelPreserved = fs.readFileSync(path.join(projectRoot, 'AGENTS.md'), 'utf8') === projectSentinel
 const readmeAudit = exists(path.join(installedRoot, 'scripts', 'audit-readme-docs.mjs'))
   ? run(process.execPath, [path.join(installedRoot, 'scripts', 'audit-readme-docs.mjs'), '--root', installedRoot, '--json'], consumerRoot)
   : { command: 'installed README audit skipped; script missing', cwd: consumerRoot, status: 1, stdout: '', stderr: 'script missing' }
@@ -119,9 +162,12 @@ const checks = [
   check('NTI03', 'tarball installs into a clean consumer project', installRun.status === 0 && exists(installedRoot), installRun.command, installRun.stderr),
   check('NTI04', 'installed package metadata is intact', installedPkg?.name === '@t275005746/gse' && installedPkg?.bin?.gse === 'scripts/gse.mjs', 'installed package.json'),
   check('NTI05', 'installed package exposes gse bin shim', exists(binPath), binPath),
-  check('NTI06', 'installed gse bin runs status command', binRun.status === 0 && binData?.command === '/gse status' && binData?.project?.stateValid === true, binRun.command, binRun.stderr),
-  check('NTI07', 'installed README audit passes', readmeAudit.status === 0 && readmeData?.summary?.failed === 0, readmeAudit.command, readmeAudit.stderr),
-  check('NTI08', 'installed package metadata points at the public GSE repository without publishConfig overrides', !installedPkg?.publishConfig && expectedRepositoryUrls.has(repositoryUrl), 'repository=' + (repositoryUrl ?? 'missing') + ', publishConfig=' + (installedPkg?.publishConfig ? 'present' : 'absent')),
+  check('NTI06', 'installed gse bin renders help from the installed package', helpRun.status === 0 && helpData?.command === '/gse help' && helpExecutionData?.status === 'ready' && helpExecutionData?.commands?.some((item) => item.command === '/gse init'), helpRun.command, helpRun.stderr),
+  check('NTI07', 'installed init preview is read-only for a separate consumer project', initPreviewRun.status === 0 && initPreviewExecutionData?.status === 'preview' && initPreviewExecutionData?.writes?.performed === false && JSON.stringify(beforeInitPreview) === JSON.stringify(afterInitPreview), initPreviewRun.command, initPreviewRun.stderr),
+  check('NTI08', 'installed init execute creates project state and preserves project rules', initRun.status === 0 && initData?.verb === 'init' && initData?.route?.route === 'scripts/init-project.mjs' && initExecutionData?.results?.some((item) => item.relativePath === 'state.json' && item.status === 'written') && exists(path.join(projectRoot, '.gse', 'state.json')) && projectSentinelPreserved, initRun.command, initRun.stderr),
+  check('NTI09', 'installed bin runs status against the consumer project', statusRun.status === 0 && statusData?.command === '/gse status' && statusData?.project?.stateValid === true, statusRun.command, statusRun.stderr),
+  check('NTI10', 'installed README audit passes', readmeAudit.status === 0 && readmeData?.summary?.failed === 0, readmeAudit.command, readmeAudit.stderr),
+  check('NTI11', 'installed package metadata points at the public GSE repository without publishConfig overrides', !installedPkg?.publishConfig && expectedRepositoryUrls.has(repositoryUrl), 'repository=' + (repositoryUrl ?? 'missing') + ', publishConfig=' + (installedPkg?.publishConfig ? 'present' : 'absent')),
 ]
 
 const passed = checks.filter((item) => item.status === 'passed').length
@@ -136,7 +182,7 @@ const report = {
   workflows: {
     npmTarballPack: packRun.status === 0 ? 'verified' : 'failed',
     npmTarballInstall: installRun.status === 0 ? 'verified' : 'failed',
-    installedBin: binRun.status === 0 ? 'verified' : 'failed',
+    installedBin: [helpRun, initPreviewRun, initRun, statusRun].every((item) => item.status === 0) ? 'verified' : 'failed',
   },
   package: installedPkg
     ? {
@@ -146,7 +192,7 @@ const report = {
         license: installedPkg.license,
       }
     : null,
-  commands: [packRun.command, installRun.command, binRun.command, readmeAudit.command],
+  commands: [packRun.command, installRun.command, helpRun.command, initPreviewRun.command, initRun.command, statusRun.command, readmeAudit.command],
   limits: [
     'This audit verifies local npm tarball creation and installation into a clean consumer project.',
     'It does not publish GSE to npm, reserve a package name, prove public repository settings, or prove marketplace approval.',

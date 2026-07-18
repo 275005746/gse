@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
@@ -16,10 +15,6 @@ const target = path.resolve(readArg('--target', root))
 const profile = readArg('--profile', 'lite')
 const jsonOnly = args.includes('--json')
 const maxCommandMs = Number(readArg('--max-command-ms', '0'))
-
-function scriptExists(name) {
-  return fs.existsSync(path.join(root, 'scripts', name))
-}
 
 function run(script, commandArgs) {
   const startedMs = Date.now()
@@ -81,6 +76,7 @@ function commandList(selectedProfile) {
     ['audit-stage-orchestrator.mjs', ['--root', root, '--json']],
     ['audit-goal-discovery.mjs', ['--root', root, '--json']],
     ['audit-context-orchestrator.mjs', ['--root', root, '--json']],
+    ['audit-task-admission.mjs', ['--root', root, '--json']],
                 ['audit-session-sync.mjs', ['--root', root, '--json']],
         ['audit-learning-system.mjs', ['--root', root, '--json']],
   ]

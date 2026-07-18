@@ -11,7 +11,15 @@ const root = path.resolve(rootIndex === -1 ? path.join(import.meta.dirname, '..'
 const jsonOnly = args.includes('--json')
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'gse-context-orchestrator-'))
 fs.mkdirSync(path.join(fixture, '.gse'), { recursive: true })
-fs.writeFileSync(path.join(fixture, '.gse', 'state.json'), JSON.stringify({ projectName: 'fixture', currentSlice: { id: 'CTX-1', outcome: 'Protect context.', status: 'in-progress', nextAction: 'Run fixture.' } }), 'utf8')
+fs.writeFileSync(path.join(fixture, '.gse', 'state.json'), JSON.stringify({
+  projectName: 'fixture',
+  phase: 'implementation',
+  topLevelPlanUnitId: 'fixture-context-plan',
+  currentSlice: { id: 'CTX-1', topLevelPlanUnitId: 'fixture-context-plan', outcome: 'Protect context.', status: 'in-progress', nextAction: 'Run fixture.' },
+  residualRisks: [{ id: 'R1', severity: 'medium', summary: 'Bounded fixture risk.' }],
+  noisyHistory: 'raw conversation should never enter the resume index ' + 'x'.repeat(20000),
+  rawLogPointer: 'C:/private/raw-session.jsonl',
+}), 'utf8')
 fs.writeFileSync(path.join(fixture, 'allowed-context.md'), '# Allowed context\\n', 'utf8')
 function rollout(name, used, window, compactions = 0, sentinel = false) {
   const file = path.join(fixture, `${name}.jsonl`)
@@ -35,10 +43,15 @@ function run(script, commandArgs) {
 const missing = run('audit-context-health.mjs', ['--target', fixture, '--codex-home', path.join(fixture, 'missing'), '--json'])
 const checkpoint = run('generate-context-checkpoint.mjs', ['--root', root, '--target', fixture, '--session', files.orange, '--max-tokens', '8000', '--include-content', '--json'])
 const boundedCheckpoint = run('generate-context-checkpoint.mjs', ['--root', root, '--target', fixture, '--session', files.orange, '--include', 'allowed-context.md,../outside.md', '--max-tokens', '8000', '--json'])
+const checkpointExecute = run('generate-context-checkpoint.mjs', ['--root', root, '--target', fixture, '--session', files.orange, '--execute', '--json'])
+const resumeIndex = checkpointExecute.data?.resumeSummary
+const continueFromIndex = run('generate-continue-packet.mjs', ['--root', root, '--target', fixture, '--json', '--compact'])
 const continueOrange = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--session', files.orange, '--json'])
 const continueRepair = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--invalid-evidence-fixture', '--json'])
 const continueVerified = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json'])
 const continueVerifiedAgain = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json'])
+const continueAutonomous = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--autonomous-host-fixture', '--json'])
+const continueCancelled = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--cancelled-host-fixture', '--json'])
 const compactVerified = run('generate-continue-packet.mjs', ['--root', root, '--self-test', '--verified-slice-fixture', '--json', '--compact'])
 const runnerCompact = run('run-gse-command.mjs', ['--root', root, '--target', root, '--command', '/gse continue', '--json', '--compact'])
 const cliCompact = run('gse.mjs', ['continue', '--target', root, '--json', '--compact'])
@@ -126,6 +139,22 @@ check('CTX24', 'repeated continuation produces stable top-level plan-unit identi
 check('CTX25', 'continuation and rollover reuse the active plan unit without creating a task', continueOrange.data?.compactState?.noGoalMode?.taskRouting?.topLevelPlanUnitId === 'fixture-continue'
   && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.taskCreationIntent === 'reuse'
   && continueOrange.data?.compactState?.noGoalMode?.taskRouting?.globalTaskEligible === false, continueOrange.data?.compactState?.noGoalMode?.taskRouting)
+check('CTX25a', 'unknown host defaults to turn-controlled reinjection', continueVerified.data?.compactState?.continuationPolicy?.mode === 'host-turn-controlled'
+  && continueVerified.data?.compactState?.continuationPolicy?.stopOutcome === 'continue-now'
+  && continueVerified.data?.compactState?.continuationPolicy?.canAutoContinue === false
+  && continueVerified.data?.compactState?.continuationPolicy?.requiresHostReinjection === true
+  && continueVerified.data?.compactState?.continuationPolicy?.hostDispatchObserved === false, continueVerified.data?.compactState?.continuationPolicy)
+check('CTX25b', 'explicit autonomous host mode permits bounded continuation only', continueAutonomous.status === 0
+  && continueAutonomous.data?.compactState?.continuationPolicy?.mode === 'host-autonomous-continuation'
+  && continueAutonomous.data?.compactState?.continuationPolicy?.stopOutcome === 'continue-now'
+  && continueAutonomous.data?.compactState?.continuationPolicy?.canAutoContinue === true
+  && continueAutonomous.data?.compactState?.continuationPolicy?.requiresHostReinjection === false
+  && continueAutonomous.data?.compactState?.continuationPolicy?.hostDispatchObserved === false, continueAutonomous.data?.compactState?.continuationPolicy)
+check('CTX25c', 'cancelled host goal blocks continuation without claiming dispatch', continueCancelled.status === 0
+  && continueCancelled.data?.compactState?.continuationPolicy?.stopOutcome === 'blocked'
+  && continueCancelled.data?.compactState?.continuationPolicy?.canAutoContinue === false
+  && continueCancelled.data?.compactState?.continuationPolicy?.hostDispatchObserved === false
+  && continueCancelled.data?.compactState?.continuationPolicy?.hostLifecycleStatus === 'cancelled', continueCancelled.data?.compactState?.continuationPolicy)
 check('CTX26', 'worker recommendation is separate from verified dispatch', reports.yellow.workerRouting?.recommendation === 'one-bounded-worker'
   && reports.yellow.workerRouting?.dispatch?.status === 'not-observed'
   && reports.yellow.workerRouting?.dispatch?.verified === false, reports.yellow.workerRouting)
@@ -141,6 +170,19 @@ check('CTX28', 'runner and CLI propagate compact output without nested stdout', 
   && cliCompact.data?.outputProfile === 'compact'
   && !Object.hasOwn(runnerCompact.data || {}, 'execution')
   && !Object.hasOwn(cliCompact.data || {}, 'execution'), { runner: runnerCompact.data, cli: cliCompact.data })
+check('CTX29', 'resume index retains bounded lifecycle state and discards noisy history', checkpointExecute.status === 0
+  && resumeIndex?.schemaVersion === 1
+  && resumeIndex?.kind === 'gse-context-resume-index'
+  && resumeIndex?.planUnit?.topLevelPlanUnitId === 'fixture-context-plan'
+  && resumeIndex?.planUnit?.currentSlice?.id === 'CTX-1'
+  && resumeIndex?.retention?.discarded?.includes('raw conversation history')
+  && !JSON.stringify(resumeIndex).includes('raw conversation should never enter')
+  && !JSON.stringify(resumeIndex).includes('raw-session.jsonl'), resumeIndex)
+check('CTX30', 'continuation rehydrates from compact index without copying raw source payload', continueFromIndex.status === 0
+  && continueFromIndex.data?.resumeSummary?.planUnit?.topLevelPlanUnitId === 'fixture-context-plan'
+  && continueFromIndex.data?.resumeSummary?.planUnit?.currentSlice?.id === 'CTX-1'
+  && continueFromIndex.data?.resumeSummary?.bounds?.withinBudget === true
+  && !JSON.stringify(continueFromIndex.data).includes('raw conversation should never enter'), continueFromIndex.data?.resumeSummary)
 const failed = checks.filter((item) => item.status === 'failed').length
 const report = { root, generatedAt: new Date().toISOString(), summary: { status: failed ? 'failed' : 'passed', passed: checks.length - failed, failed, total: checks.length }, workflows: { contextOrchestrator: failed ? 'incomplete' : 'verified' }, checks, limits: ['Fixture routing does not create a host task or prove real subagent execution.'] }
 fs.rmSync(fixture, { recursive: true, force: true })
