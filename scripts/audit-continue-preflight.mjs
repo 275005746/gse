@@ -129,6 +129,51 @@ function fixture(invalidEvidence = false) {
   return dir
 }
 
+function externalRiskHistoryFixture() {
+  const dir = fixture(false)
+  const statePath = path.join(dir, '.gse', 'state.json')
+  const state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
+  delete state.riskArchive
+  state.stateRevision = 4
+  state.activeChangeId = null
+  state.riskHistoryPath = '.gse/risk-history.jsonl'
+  state.archivedRiskCount = 2
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8')
+  fs.writeFileSync(
+    path.join(dir, '.gse', 'risk-history.jsonl'),
+    [
+      {
+        schemaVersion: 1,
+        eventId: 'risk-history-one',
+        transactionId: null,
+        recordType: 'risk-history',
+        riskId: 'risk-history-one',
+        deduplicationKey: `sha256:${'1'.repeat(64)}`,
+        risk: 'historical ledger secret one',
+        sourceRevision: 3,
+        archivedAt: '2026-07-08T00:00:00.000Z',
+        resolution: 'fixture archive',
+        stateRevision: 4,
+      },
+      {
+        schemaVersion: 1,
+        eventId: 'risk-history-two',
+        transactionId: null,
+        recordType: 'risk-history',
+        riskId: 'risk-history-two',
+        deduplicationKey: `sha256:${'2'.repeat(64)}`,
+        risk: 'historical ledger secret two',
+        sourceRevision: 3,
+        archivedAt: '2026-07-08T00:00:00.000Z',
+        resolution: 'fixture archive',
+        stateRevision: 4,
+      },
+    ].map((record) => JSON.stringify(record)).join('\n') + '\n',
+    'utf8',
+  )
+  return dir
+}
+
 function verifiedSliceFixture() {
   const dir = fixture(false)
   const statePath = path.join(dir, '.gse', 'state.json')
@@ -290,6 +335,7 @@ function libraryCliFixture() {
 }
 
 const validFixture = fixture(false)
+const externalRiskHistory = externalRiskHistoryFixture()
 const invalidFixture = fixture(true)
 const verifiedFixture = verifiedSliceFixture()
 const driftFixture = productDriftFixture()
@@ -299,6 +345,7 @@ const bloatedCanonical = bloatedCanonicalFixture()
 const appStyleProduct = appStyleProductFixture()
 const libraryCli = libraryCliFixture()
 const directValid = run('generate-continue-packet.mjs', ['--root', root, '--target', validFixture, '--json'])
+const directExternalRiskHistory = run('generate-continue-packet.mjs', ['--root', root, '--target', externalRiskHistory, '--json'])
 const directInvalid = run('generate-continue-packet.mjs', ['--root', root, '--target', invalidFixture, '--json'])
 const directVerified = run('generate-continue-packet.mjs', ['--root', root, '--target', verifiedFixture, '--json'])
 const directProductDrift = run('generate-continue-packet.mjs', ['--root', root, '--target', driftFixture, '--json'])
@@ -317,6 +364,7 @@ const commandInvalid = run('run-gse-command.mjs', ['--root', root, '--target', i
 const gseSelf = run('run-gse-command.mjs', ['--root', root, '--target', root, '--command', '/gse continue', '--json', '--compact'])
 
 const validData = parseJson(directValid.stdout)
+const externalRiskHistoryData = parseJson(directExternalRiskHistory.stdout)
 const invalidData = parseJson(directInvalid.stdout)
 const verifiedData = parseJson(directVerified.stdout)
 const productDriftData = parseJson(directProductDrift.stdout)
@@ -339,17 +387,18 @@ const promptLines = String(validData?.prompt ?? '').split(/\r?\n/).filter(Boolea
 const checks = [
   check('CPF01', 'continue packet generator exists', fs.existsSync(path.join(root, 'scripts', 'generate-continue-packet.mjs')), 'scripts/generate-continue-packet.mjs'),
   check('CPF02', '/gse continue routes through continue packet generator', runnerSource.includes("runNode('generate-continue-packet.mjs'") && runnerSource.includes("route: 'scripts/generate-continue-packet.mjs'"), 'scripts/run-gse-command.mjs'),
-  check('CPF03', 'valid fixture returns passed preflight and compact active-risk state', directValid.status === 0 && validData?.summary?.status === 'passed' && validData?.compactState?.riskCount === 4 && validData?.compactState?.activeRiskCount === 4 && validData?.compactState?.archivedRiskCount === 1 && validData?.compactState?.totalRiskCount === 5 && validData?.compactState?.topRisks?.length === 3, directValid.command),
+  check('CPF03', 'valid fixture returns passed preflight and compact active-risk state', directValid.status === 0 && validData?.summary?.status === 'passed' && validData?.compactState?.riskCount === 4 && validData?.compactState?.activeRiskCount === 4 && validData?.compactState?.archivedRiskCount === 1 && validData?.compactState?.totalRiskCount === 5 && validData?.compactState?.topRisks?.length === 3 && !directValid.stdout.includes('archived risk'), directValid.command),
+  check('CPF03b', 'external risk ledger contributes count and path without loading historical text', directExternalRiskHistory.status === 0 && externalRiskHistoryData?.compactState?.activeRiskCount === 4 && externalRiskHistoryData?.compactState?.archivedRiskCount === 2 && externalRiskHistoryData?.compactState?.totalRiskCount === 6 && externalRiskHistoryData?.compactState?.riskHistoryPath === '.gse/risk-history.jsonl' && !directExternalRiskHistory.stdout.includes('historical ledger secret'), directExternalRiskHistory.command),
   check('CPF04', 'bad evidence index is a hard preflight failure', directInvalid.status !== 0 && invalidData?.summary?.status === 'failed' && invalidData?.preflight?.failures?.some((item) => item.id === 'CP03'), directInvalid.command),
   check('CPF04b', 'bad evidence index returns concrete repair actions before implementation', directInvalid.status !== 0 && invalidData?.preflight?.failures?.some((item) => item.id === 'CP15') && invalidData?.compactState?.stateRepair?.repairActions?.some((item) => item.id === 'SR03'), directInvalid.command),
   check('CPF05', 'portable /gse continue exposes structured preflight wrapper', commandValid.status === 0 && commandValidData?.execution?.command?.includes('generate-continue-packet.mjs') && commandValidData?.execution?.stdout?.includes('"compactState"'), commandValid.command),
   check('CPF06', 'compact mode returns packet without wrapper diagnostics', commandCompact.status === 0 && commandCompactData?.outputProfile === 'compact' && commandCompactData?.currentSlice && !commandCompact.stdout.includes('"execution"'), commandCompact.command),
   check('CPF07', 'portable command fails when preflight has hard failures', commandInvalid.status !== 0 && commandInvalidData?.execution?.status !== 0 && commandInvalidData?.execution?.stdout?.includes('"status": "failed"'), commandInvalid.command),
-  check('CPF08', 'GSE self continue preserves local readiness while keeping external acceptance pending', gseSelf.status === 0 && ['passed', 'warning'].includes(gseSelfData?.status) && (gseSelfData?.failures?.length ?? 0) === 0 && gseSelfData?.ownerExternalGateSummary?.publicAccepted === 'not-accepted' && gseSelfData?.ownerExternalGateSummary?.pendingGates === 3, gseSelf.command),
-  check('CPF09', 'SKILL.md routes short continuation to hard preflight packet', skillSource.includes('generate-continue-packet.mjs') && skillSource.includes('Short continuation packet'), 'SKILL.md'),
+  check('CPF08', 'GSE self continue preserves local readiness while keeping external acceptance pending', gseSelf.status === 0 && ['passed', 'warning'].includes(gseSelfData?.status) && (gseSelfData?.failures?.length ?? 0) === 0 && gseSelfData?.ownerExternalGateSummary?.publicAccepted === 'not-accepted' && gseSelfData?.ownerExternalGateSummary?.pendingGates === 2, gseSelf.command),
+  check('CPF09', 'SKILL.md routes compact continuation through the hard preflight command', skillSource.includes('scripts/run-gse-command.mjs') && skillSource.includes('--command "/gse continue"') && skillSource.includes('--json --compact'), 'SKILL.md'),
   check('CPF10', 'commands reference documents hard preflight semantics', commandsSource.includes('hard preflight') && commandsSource.includes('generate-continue-packet.mjs'), 'references/commands.md'),
   check('CPF11b', 'continue packet surfaces historical evidence review queue', validData?.preflight?.checks?.some((item) => item.id === 'CP13') && validData?.compactState?.evidenceReviewQueue && typeof validData.compactState.evidenceReviewQueue.needsReview === 'number', 'compactState.evidenceReviewQueue'),
-  check('CPF11', 'continue packet surfaces state repair readiness', validData?.preflight?.checks?.some((item) => item.id === 'CP15') && validData?.compactState?.stateRepair?.status === 'clean', 'scripts/generate-continue-packet.mjs'),
+  check('CPF11', 'continue packet surfaces legacy state migration readiness', validData?.preflight?.checks?.some((item) => item.id === 'CP15' && item.status === 'passed' && item.recommendation.includes('/gse repair')) && validData?.compactState?.stateRepair?.status === 'repair-advised' && validData?.compactState?.stateRepair?.repairActions?.some((item) => item.id === 'SR04' && item.severity === 'warning'), 'scripts/generate-continue-packet.mjs'),
   check('CPF12', 'continue packet surfaces latest maintenance snapshot freshness', validData?.preflight?.checks?.some((item) => item.id === 'CP20') && validData?.compactState?.maintenanceSnapshot?.status === 'passed' && validData?.compactState?.maintenanceSnapshot?.installedSync === 'package-only', 'scripts/generate-continue-packet.mjs'),
   check('CPF13', 'continue packet keeps owner/external records out of core workflow blockers', validData?.limits?.some((item) => item.includes('not GSE core workflow blockers')) && !validData?.limits?.some((item) => item.includes('block final acceptance')) && !fs.readFileSync(path.join(root, 'scripts', 'generate-continue-packet.mjs'), 'utf8').includes('Blocked final-acceptance gates'), 'scripts/generate-continue-packet.mjs'),
   check('CPF14', 'continue packet exposes exact completion plan and close commands', Array.isArray(validData?.compactState?.completionPlan?.requiredCloseCommands) && validData.compactState.completionPlan.requiredCloseCommands.some((item) => item.includes('run-validation-profile.mjs')) && validData.compactState.completionPlan.requiredCloseCommands.some((item) => item.includes('/gse close')) && validData.compactState.completionPlan.requiredSteps.some((item) => item.includes('evidence/index.jsonl')), 'compactState.completionPlan'),
@@ -386,6 +435,7 @@ const checks = [
 ]
 
 fs.rmSync(validFixture, { recursive: true, force: true })
+fs.rmSync(externalRiskHistory, { recursive: true, force: true })
 fs.rmSync(invalidFixture, { recursive: true, force: true })
 fs.rmSync(verifiedFixture, { recursive: true, force: true })
 fs.rmSync(driftFixture, { recursive: true, force: true })
@@ -420,7 +470,7 @@ const report = {
     canonicalCompactionDryRun: failed === 0 ? 'verified' : 'failed',
     continueOutputProfiles: failed === 0 ? 'verified' : 'failed',
   },
-  commands: [directValid.command, directInvalid.command, directVerified.command, directProductDrift.command, directProductVisible.command, directBoundedSupport.command, directBloatedCanonical.command, directAppStyleProduct.command, directLibraryCli.command, directBrief.command, directDoctor.command, documentHygiene.command, compactionPlan.command, commandValid.command, commandCompact.command, commandInvalid.command, gseSelf.command],
+  commands: [directValid.command, directExternalRiskHistory.command, directInvalid.command, directVerified.command, directProductDrift.command, directProductVisible.command, directBoundedSupport.command, directBloatedCanonical.command, directAppStyleProduct.command, directLibraryCli.command, directBrief.command, directDoctor.command, documentHygiene.command, compactionPlan.command, commandValid.command, commandCompact.command, commandInvalid.command, gseSelf.command],
   checks,
   limits: [
     'This audit verifies portable /gse continue semantics and compact packet output.',

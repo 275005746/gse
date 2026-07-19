@@ -141,3 +141,30 @@ When the user limits task or subagent counts, treat that limit as a total execut
 - **Notes**: Stopped the fan-out review path and switched the remaining review to a single inline execution stream without Agents, workflows, or task creation.
 
 ---
+
+## [LRN-20260719-003] correction
+
+**Logged**: 2026-07-19T00:00:00Z
+**Priority**: high
+**Status**: pending
+**Area**: backend
+
+### Summary
+Cross-project state-format defects must be fixed in the GSE skill lifecycle, not framed as a target-project migration feature.
+
+### Details
+Hermes exposed missing Core v1 transaction fields, duplicate tool-status naming, and embedded risk-history bloat, but those are symptoms of GSE initialization, adoption update, migration execution, doctor, and repair gaps. Treating the work as an independent Hermes GSE migration would duplicate policy in the target and leave every other adopted project vulnerable.
+
+### Suggested Action
+Trace and repair the generic GSE skill first. Use Hermes only as a real legacy-target fixture and end-to-end acceptance target; add target-local code only when a consumer compatibility test proves it necessary.
+
+### Metadata
+- Source: user_feedback
+- Related Files: scripts/init-project.mjs, scripts/update-project-state.mjs, scripts/core/migration-v1.mjs, scripts/audit-state-repair.mjs
+- Tags: gse, migration, ownership, compatibility
+- Pattern-Key: architecture.fix_framework_not_target_symptom
+- Recurrence-Count: 1
+- First-Seen: 2026-07-19
+- Last-Seen: 2026-07-19
+
+---

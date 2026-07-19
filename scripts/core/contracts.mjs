@@ -12,7 +12,7 @@ const TRANSACTION_STATUSES = new Set(['prepared', 'staged', 'published', 'commit
 const WRITE_KINDS = new Set(['json-replace', 'jsonl-append', 'text-write', 'tree-move'])
 const REQUIRED_WRITE_FIELDS = ['kind', 'path', 'beforeDigest', 'afterDigest', 'stagedPath']
 const MANIFEST_FIELDS = new Set(['schemaVersion', 'transactionId', 'operationId', 'createdAt', 'expectedRevision', 'nextRevision', 'status', 'writes', 'eventIds'])
-const WRITE_FIELDS = new Set([...REQUIRED_WRITE_FIELDS, 'eventId', 'beforeSize', 'beforeImagePath', 'sourcePath', 'targetPath'])
+const WRITE_FIELDS = new Set([...REQUIRED_WRITE_FIELDS, 'eventId', 'eventIds', 'beforeSize', 'beforeImagePath', 'sourcePath', 'targetPath'])
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const RFC3339_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/
 const WINDOWS_DRIVE_PATTERN = /^[A-Za-z]:/
@@ -195,7 +195,15 @@ export function assertTransactionManifestContract(manifest) {
         }
         if (write.kind !== 'tree-move' && !isSafeRelativePath(write.beforeImagePath)) diagnostics.push({ code: 'INVALID_WRITE_PATH', field: `${prefix}.beforeImagePath` })
         if (write.kind === 'jsonl-append') {
-          if (typeof write.eventId !== 'string' || write.eventId.length === 0) diagnostics.push({ code: 'REQUIRED_WRITE_FIELD', field: `${prefix}.eventId` })
+          const eventIds = Array.isArray(write.eventIds) ? write.eventIds : [write.eventId]
+          if (
+            eventIds.length === 0
+            || eventIds.some((eventId) => typeof eventId !== 'string' || eventId.length === 0)
+            || new Set(eventIds).size !== eventIds.length
+          ) diagnostics.push({ code: 'REQUIRED_WRITE_FIELD', field: `${prefix}.eventIds` })
+          if (Object.hasOwn(write, 'eventId') && (eventIds.length !== 1 || write.eventId !== eventIds[0])) {
+            diagnostics.push({ code: 'INCONSISTENT_EVENT_IDS', field: `${prefix}.eventId` })
+          }
           if (!Number.isInteger(write.beforeSize) || write.beforeSize < 0) diagnostics.push({ code: 'REQUIRED_WRITE_FIELD', field: `${prefix}.beforeSize` })
         }
         if (write.kind === 'tree-move') {
@@ -206,7 +214,9 @@ export function assertTransactionManifestContract(manifest) {
       }
     }
     const writeEventIds = Array.isArray(manifest.writes)
-      ? manifest.writes.filter((write) => write?.kind === 'jsonl-append').map((write) => write.eventId)
+      ? manifest.writes
+        .filter((write) => write?.kind === 'jsonl-append')
+        .flatMap((write) => Array.isArray(write.eventIds) ? write.eventIds : [write.eventId])
       : []
     const manifestEventIdsValid = Array.isArray(manifest.eventIds)
       && manifest.eventIds.every((value) => typeof value === 'string' && value.length > 0)

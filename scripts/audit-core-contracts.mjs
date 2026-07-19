@@ -41,6 +41,11 @@ const schemaRequirements = {
     'invalidationScope', 'outcome', 'limitations', 'actor', 'evidenceFile',
     'relatedArtifacts', 'nextAction',
   ],
+  'risk-history-event.schema.json': [
+    'schemaVersion', 'eventId', 'transactionId', 'recordType', 'riskId',
+    'deduplicationKey', 'risk', 'sourceRevision', 'archivedAt', 'resolution',
+    'stateRevision',
+  ],
   'transaction-manifest.schema.json': [
     'schemaVersion', 'transactionId', 'operationId', 'createdAt',
     'expectedRevision', 'nextRevision', 'status', 'writes', 'eventIds',
@@ -86,13 +91,18 @@ function inspectSchemas() {
   )) failures.push('result-envelope.schema.json: status/stage enums')
 
   const projectState = schemas['project-state.schema.json']
-  const legacyStateFields = [
+  const optionalProjectStateFields = [
     'projectName', 'mode', 'canonicalGoalSource', 'canonicalPlan', 'phase',
     'currentSummary', 'currentSlice', 'toolStatuses', 'lastEvidence',
-    'blockedGates', 'nextChecks', 'residualRisks', 'riskArchive',
+    'blockedGates', 'nextChecks', 'residualRisks', 'riskHistoryPath',
+    'archivedRiskCount', 'sourceRevision', 'updatedAt',
   ]
-  if (projectState && !legacyStateFields.every((field) => Object.hasOwn(projectState.properties ?? {}, field) && !projectState.required?.includes(field))) {
-    failures.push('project-state.schema.json: optional legacy fields')
+  if (projectState && (
+    !optionalProjectStateFields.every((field) => Object.hasOwn(projectState.properties ?? {}, field) && !projectState.required?.includes(field))
+    || Object.hasOwn(projectState.properties ?? {}, 'riskArchive')
+    || projectState.properties?.riskHistoryPath?.const !== '.gse/risk-history.jsonl'
+  )) {
+    failures.push('project-state.schema.json: compact optional fields')
   }
 
   const activeChange = schemas['active-change.schema.json']
@@ -117,6 +127,13 @@ function inspectSchemas() {
     JSON.stringify(evidence.properties?.status?.enum) !== JSON.stringify(['result', 'verified', 'accepted'])
     || !dependencyFields.every((field) => evidence.properties?.dependencies?.required?.includes(field))
   )) failures.push('evidence-event.schema.json: status/dependencies contract')
+
+  const riskHistory = schemas['risk-history-event.schema.json']
+  if (riskHistory && (
+    riskHistory.properties?.recordType?.const !== 'risk-history'
+    || riskHistory.properties?.deduplicationKey?.pattern !== '^sha256:[a-f0-9]{64}$'
+    || JSON.stringify(riskHistory.properties?.transactionId?.type) !== JSON.stringify(['string', 'null'])
+  )) failures.push('risk-history-event.schema.json: identity/transaction contract')
 
   const transaction = schemas['transaction-manifest.schema.json']
   const writeSchema = transaction?.$defs?.write

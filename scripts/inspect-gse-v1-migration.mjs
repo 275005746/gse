@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { inspectGseV1Project } from './core/migration-v1.mjs'
+import { executeGseV1Migration, inspectGseV1Project } from './core/migration-v1.mjs'
 import { createResultEnvelope } from './core/contracts.mjs'
 
 const OPERATION_ID = 'op-migration-v1-inspection-cli'
-const READ_ONLY_LIMIT = 'Inspection is strictly dry-run and read-only; it cannot execute migration.'
-const ALLOWED_FLAGS = new Set(['--target', '--json'])
-const BLOCKING_FLAGS = new Set(['--execute', '--write', '--force'])
+const READ_ONLY_LIMIT = 'Inspection is dry-run and read-only unless --execute is supplied explicitly.'
+const ALLOWED_FLAGS = new Set(['--target', '--json', '--execute'])
+const BLOCKING_FLAGS = new Set(['--write', '--force'])
 
 function envelope(input, extras = {}) {
   return {
@@ -17,6 +17,9 @@ function envelope(input, extras = {}) {
       ? extras.sourceDigests
       : {},
     conflicts: Array.isArray(extras.conflicts) ? extras.conflicts : [],
+    migrationSummary: extras.migrationSummary && typeof extras.migrationSummary === 'object' && !Array.isArray(extras.migrationSummary)
+      ? extras.migrationSummary
+      : null,
     limits: Array.isArray(extras.limits) ? extras.limits : [READ_ONLY_LIMIT],
   }
 }
@@ -25,8 +28,8 @@ function blockedDryRunResult() {
   return envelope({
     status: 'blocked',
     stage: null,
-    reasonCode: 'DRY_RUN_ONLY',
-    message: 'Inspection cannot execute migration; this CLI is read-only.',
+    reasonCode: 'UNSUPPORTED_MIGRATION_BYPASS',
+    message: 'Migration bypass flags are not supported; use explicit --execute after reviewing the dry-run proposal.',
     changeId: null,
     taskId: null,
     stateRevision: null,
@@ -43,7 +46,7 @@ function invalidArgumentsResult() {
     status: 'repair',
     stage: null,
     reasonCode: 'INVALID_ARGUMENTS',
-    message: 'Only --target <path> and --json are supported.',
+    message: 'Only --target <path>, --json, and explicit --execute are supported.',
     changeId: null,
     taskId: null,
     stateRevision: null,
@@ -75,12 +78,19 @@ function inspectionFailedResult() {
 function parseArguments(argv) {
   let target = process.cwd()
   let json = false
+  let execute = false
   let targetSeen = false
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
+    if (!ALLOWED_FLAGS.has(argument)) return null
     if (argument === '--json') {
       json = true
+      continue
+    }
+    if (argument === '--execute') {
+      if (execute) return null
+      execute = true
       continue
     }
     if (argument === '--target') {
@@ -90,12 +100,10 @@ function parseArguments(argv) {
       targetSeen = true
       target = argv[index + 1]
       index += 1
-      continue
     }
-    if (argument.startsWith('--') || argument.length > 0) return null
   }
 
-  return { target, json }
+  return { target, json, execute }
 }
 
 function exitCodeFor(result) {
@@ -136,7 +144,9 @@ async function main() {
       exitCode = 1
     } else {
       try {
-        result = await Promise.resolve(inspectGseV1Project(parsed.target))
+        result = await Promise.resolve(parsed.execute
+          ? executeGseV1Migration(parsed.target)
+          : inspectGseV1Project(parsed.target))
         exitCode = exitCodeFor(result)
       } catch {
         result = inspectionFailedResult()

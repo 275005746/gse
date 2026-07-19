@@ -17,6 +17,7 @@ import { findCanonicalGoalSource } from './canonical-goal-source.mjs'
 import { analyzeCanonicalGoalSourceHygiene } from './document-hygiene.mjs'
 import { CONTEXT_BUDGETS, buildContextResumeSummary, internalTaskRouting } from './context-health.mjs'
 import { evaluateTaskAdmission } from './task-admission.mjs'
+import { readCompatibleRiskSummary } from './core/project-state-v1.mjs'
 
 const args = process.argv.slice(2)
 
@@ -670,8 +671,20 @@ function buildShortPrompt({ projectName, resolvedTarget, preflightStatus, compac
   return lines.join('\n')
 }
 
-function buildContinuationPolicy({ state, compactState, failedHardChecks, blockedGates }) {
-  const requestedMode = String(state?.hostContinuationMode || state?.hostCapabilities?.continuationMode || '').trim().toLowerCase()
+function buildContinuationPolicy({
+  state,
+  compactState,
+  failedHardChecks,
+  blockedGates,
+  hostContinuationMode,
+  hostGoalStatus,
+}) {
+  const requestedMode = String(
+    hostContinuationMode
+      || state?.hostContinuationMode
+      || state?.hostCapabilities?.continuationMode
+      || '',
+  ).trim().toLowerCase()
   const mode = requestedMode === 'host-autonomous-continuation'
     ? 'host-autonomous-continuation'
     : 'host-turn-controlled'
@@ -681,7 +694,10 @@ function buildContinuationPolicy({ state, compactState, failedHardChecks, blocke
   const nextAction = String(compactState.currentSlice?.nextAction || '').trim()
   const nextSlice = compactState.nextSliceCandidates?.[0] || null
   const hostLifecycleStatus = String(
-    state?.hostGoalStatus || state?.hostCapabilities?.goalStatus || ''
+    hostGoalStatus
+      || state?.hostGoalStatus
+      || state?.hostCapabilities?.goalStatus
+      || ''
   ).trim().toLowerCase()
   const hostLifecycleStopped = ['cancelled', 'canceled', 'paused', 'ended', 'replaced'].includes(hostLifecycleStatus)
 
@@ -1395,10 +1411,10 @@ function createFixture(options = {}) {
     path.join(dir, '.gse', 'state.json'),
     JSON.stringify({
       schemaVersion: 1,
+      stateRevision: 0,
+      activeChangeId: null,
       projectName: 'fixture-product',
       mode: 'standard',
-      hostContinuationMode: options.hostContinuationMode || undefined,
-      hostGoalStatus: options.hostGoalStatus || undefined,
       canonicalGoalSource: 'docs/productization-architecture.md',
       canonicalPlan: 'docs/productization-architecture.md',
       phase: 'execute',
@@ -1459,6 +1475,11 @@ async function buildContinuePacket(target) {
   const resumeIndex = resumeIndexResult.ok ? resumeIndexResult.data : null
   const stateResult = readJson(path.join(gseDir, 'state.json'))
   const state = stateResult.ok ? stateResult.data : null
+  const riskHistory = readJsonl(path.join(gseDir, 'risk-history.jsonl'))
+  const riskSummary = readCompatibleRiskSummary(
+    state,
+    riskHistory.ok && riskHistory.exists ? riskHistory.records.length : null,
+  )
   const evidenceIndex = readJsonl(path.join(gseDir, 'evidence', 'index.jsonl'))
   const goalMapText = readText(path.join(gseDir, 'goal-map.md'))
   const profileText = readText(path.join(gseDir, 'project-profile.md'))
@@ -1688,12 +1709,11 @@ async function buildContinuePacket(target) {
     firstMatch(profileText, /Product\/system name:\s*([^\n]+)/i) ||
     path.basename(resolvedTarget),
   )
-  const residualRisks = Array.isArray(state?.residualRisks) ? state.residualRisks : []
-  const archivedRisks = Array.isArray(state?.riskArchive) ? state.riskArchive : []
+  const residualRisks = riskSummary.residualRisks
   const topRisks = residualRisks.slice(0, 3)
   const hiddenActiveRiskCount = Math.max(0, residualRisks.length - topRisks.length)
-  const archivedRiskCount = archivedRisks.length
-  const totalRiskCount = residualRisks.length + archivedRisks.length
+  const archivedRiskCount = riskSummary.archivedRiskCount
+  const totalRiskCount = residualRisks.length + archivedRiskCount
   const blockedGates = []
 
   const targetHasPublicAcceptanceDoctor =
@@ -1748,6 +1768,14 @@ async function buildContinuePacket(target) {
     compactState: { currentSlice, nextSliceCandidates, contextHealth },
     failedHardChecks,
     blockedGates,
+    hostContinuationMode: selfTest ? (
+      args.includes('--autonomous-host-fixture')
+        ? 'host-autonomous-continuation'
+        : undefined
+    ) : undefined,
+    hostGoalStatus: selfTest && args.includes('--cancelled-host-fixture')
+      ? 'cancelled'
+      : undefined,
   })
   const nextChecks = [
     'node scripts/run-gse-command.mjs --target <project-root> --command "/gse doctor" --json',
@@ -1769,6 +1797,7 @@ async function buildContinuePacket(target) {
     activeRiskCount: residualRisks.length,
     hiddenActiveRiskCount,
     archivedRiskCount,
+    riskHistoryPath: riskSummary.riskHistoryPath,
     totalRiskCount,
     blockedGates,
     gateTaxonomy,

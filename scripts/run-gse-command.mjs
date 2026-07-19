@@ -194,8 +194,8 @@ const commandMap = {
   },
   repair: {
     route: 'scripts/audit-state-repair.mjs',
-    effect: 'read-only by default; reversible risk compaction with --execute',
-    summary: 'Diagnose or safely repair stale state, broken evidence JSONL, and overlong residual risks.',
+    effect: 'read-only by default; shared Core v1 migration with --execute',
+    summary: 'Diagnose Core v1 compatibility, state/evidence drift, and risk-history health; explicitly migrate safe legacy state.',
   },
   acceptance: {
     route: 'scripts/audit-public-acceptance-readiness.mjs or scripts/audit-target-project.mjs',
@@ -549,9 +549,9 @@ if (!knownCommand) {
     : runNode('audit-target-project.mjs', ['--target', target, '--json'])
 } else if (verb === 'repair') {
   const repairArgs = ['--root', root, '--target', target, '--json']
-  if (execute) repairArgs.push('--write')
-  const maxRiskIndex = rest.indexOf('--max-active-risks')
-  if (maxRiskIndex !== -1) repairArgs.push('--max-active-risks', rest[maxRiskIndex + 1] || '6')
+  if (execute) repairArgs.push('--execute')
+  const maxRiskIndex = rest.indexOf('--max-risk-length')
+  if (maxRiskIndex !== -1) repairArgs.push('--max-risk-length', rest[maxRiskIndex + 1] || '260')
   execution = runNode('audit-state-repair.mjs', repairArgs)
 } else if (verb === 'owner-actions' || verb === 'owner') {
   const targetHasPublicAcceptanceDoctor = fs.existsSync(path.join(target, 'scripts', 'audit-public-acceptance-readiness.mjs'))

@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 
 import { executeTransaction } from './core/persistence/transaction.mjs'
 import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+import { executeGseV1Migration, inspectGseV1Project } from './core/migration-v1.mjs'
 
 const args = process.argv.slice(2)
 
@@ -18,6 +19,7 @@ function readArg(name, fallback = null) {
 const jsonOnly = args.includes('--json')
 const dryRun = args.includes('--dry-run')
 const force = args.includes('--force')
+const executeMigration = args.includes('--execute')
 const selfTest = args.includes('--self-test') || !args.includes('--target')
 const targetArg = readArg('--target')
 const date = new Date().toISOString().slice(0, 10)
@@ -160,7 +162,51 @@ async function updateProject(target) {
   }
 
   const state = readJson(path.join(resolvedTarget, '.gse', 'state.json'))
-  if (state.exists && !state.ok && !force) warnings.push('existing .gse/state.json is invalid; rerun with --force only after backing up or reviewing it')
+  if (state.exists && !state.ok) {
+    return {
+      target: resolvedTarget,
+      generatedAt: new Date().toISOString(),
+      dryRun,
+      force,
+      summary: { status: 'failed', written: 0, skipped: 0, warnings: 0, total: 0 },
+      results,
+      warnings: ['existing .gse/state.json is invalid and cannot be rebuilt automatically'],
+      recommendation: 'Repair the reported JSON deliberately; --force does not bypass malformed project state.',
+    }
+  }
+  if (state.ok) {
+    const migration = executeMigration
+      ? await executeGseV1Migration(resolvedTarget)
+      : inspectGseV1Project(resolvedTarget)
+    if (migration.reasonCode !== 'PROJECT_STATE_V1_CANONICAL') {
+      const proposedWrites = Array.isArray(migration.proposedWrites) ? migration.proposedWrites : []
+      const artifactRefs = Array.isArray(migration.artifactRefs) ? [...new Set(migration.artifactRefs)] : []
+      const diagnostics = Array.isArray(migration.diagnostics) ? migration.diagnostics : []
+      return {
+        target: resolvedTarget,
+        generatedAt: new Date().toISOString(),
+        dryRun: !executeMigration,
+        force,
+        summary: {
+          status: migration.status === 'complete' ? 'passed' : migration.status === 'proceed' ? 'migration-available' : 'failed',
+          written: migration.status === 'complete' ? artifactRefs.length : 0,
+          skipped: 0,
+          warnings: diagnostics.length,
+          total: migration.status === 'complete' ? artifactRefs.length : proposedWrites.length,
+        },
+        results: (migration.status === 'complete' ? artifactRefs : proposedWrites.map((write) => write.path))
+          .map((relativePath) => ({
+            relativePath,
+            status: migration.status === 'complete' ? 'written' : 'would-write',
+          })),
+        warnings: diagnostics.map((item) => item.code),
+        migration,
+        recommendation: executeMigration
+          ? `${migration.message} Rerun the update after migration to refresh adoption state.`
+          : 'Review the Core v1 migration proposal, then rerun with --execute to migrate before updating project state.',
+      }
+    }
+  }
   const sparseWarning = detectSparseWarning(resolvedTarget)
   if (sparseWarning) warnings.push(sparseWarning)
 
@@ -179,18 +225,23 @@ async function updateProject(target) {
   }
 
   const stateData = state.ok ? state.data : { schemaVersion: 1, stateRevision: 0, activeChangeId: null }
+  const nextState = {
+    ...buildState(resolvedTarget),
+    stateRevision: stateData.stateRevision,
+    activeChangeId: stateData.activeChangeId,
+  }
   if (!state.exists && !dryRun) {
     fs.writeFileSync(path.join(resolvedTarget, '.gse', 'state.json'), JSON.stringify(stateData) + '\n', 'utf8')
   }
   if (dryRun) {
-    writeFile(resolvedTarget, '.gse/state.json', JSON.stringify(buildState(resolvedTarget), null, 2) + '\n', results)
+    writeFile(resolvedTarget, '.gse/state.json', JSON.stringify(nextState, null, 2) + '\n', results)
     writeFile(resolvedTarget, '.gse/evidence/index.jsonl', JSON.stringify(evidenceIndexRecord) + '\n', results)
   } else {
     const transaction = await executeTransaction({
       target: resolvedTarget,
       operationId: `update-project-state-${date}`,
       expectedRevision: stateData.stateRevision,
-      writes: [{ kind: 'json-replace', path: '.gse/state.json', value: buildState(resolvedTarget) }],
+      writes: [{ kind: 'json-replace', path: '.gse/state.json', value: nextState }],
       events: [{ path: '.gse/evidence/index.jsonl', event: evidenceIndexRecord }],
       allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
     })
@@ -232,7 +283,7 @@ function createFixture() {
 }
 
 const target = selfTest ? createFixture() : targetArg
-const report = updateProject(target)
+const report = await updateProject(target)
 
 if (jsonOnly) console.log(JSON.stringify(report, null, 2))
 else {

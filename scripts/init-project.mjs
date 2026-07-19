@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { executeTransaction } from './core/persistence/transaction.mjs'
 import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+import { inspectGseV1Project } from './core/migration-v1.mjs'
 
 const args = process.argv.slice(2)
 
@@ -32,6 +33,33 @@ if (!validHostAdapters.has(hostAdaptersArg) && !hostAdaptersArg.split(',').every
 
 const gseDir = path.join(target, '.gse')
 const date = new Date().toISOString().slice(0, 10)
+const existingStatePath = path.join(gseDir, 'state.json')
+const bootstrappedState = !fs.existsSync(existingStatePath)
+
+if (!bootstrappedState) {
+  const compatibility = inspectGseV1Project(target)
+  if (compatibility.reasonCode !== 'PROJECT_STATE_V1_CANONICAL') {
+    console.log(JSON.stringify({
+      target,
+      gseDir,
+      force,
+      requestedMode,
+      status: compatibility.status,
+      reasonCode: compatibility.reasonCode,
+      message: compatibility.reasonCode === 'MIGRATION_INSPECTION_READY'
+        ? 'Existing project state requires an explicit reviewed Core v1 migration before scaffold initialization can continue.'
+        : compatibility.message,
+      proposedWrites: compatibility.proposedWrites ?? [],
+      sourceDigests: compatibility.sourceDigests ?? {},
+      results: [],
+    }, null, 2))
+    process.exitCode = 1
+  }
+}
+
+if (process.exitCode === 1) {
+  process.exit()
+}
 
 function exists(relativePath) {
   return fs.existsSync(path.join(target, relativePath))
@@ -118,7 +146,11 @@ function writeIfMissing(relativePath, content) {
   const filePath = path.join(gseDir, relativePath)
   const canonical = relativePath === 'state.json' || relativePath === 'evidence/index.jsonl'
   const replaceBootstrapState = relativePath === 'state.json' && bootstrappedState
-  if (!force && fs.existsSync(filePath) && !replaceBootstrapState) {
+  if (
+    fs.existsSync(filePath)
+    && !replaceBootstrapState
+    && (!force || relativePath === 'state.json')
+  ) {
     return { relativePath, status: 'skipped' }
   }
   if (canonical) {
@@ -188,9 +220,8 @@ fs.mkdirSync(path.join(gseDir, 'evidence'), { recursive: true })
 fs.mkdirSync(path.join(gseDir, 'templates'), { recursive: true })
 fs.mkdirSync(path.join(gseDir, 'goals'), { recursive: true })
 
-const bootstrappedState = !exists('.gse/state.json')
 if (bootstrappedState) {
-  fs.writeFileSync(path.join(gseDir, 'state.json'), JSON.stringify({ schemaVersion: 1, stateRevision: 0, activeChangeId: null }) + '\n', 'utf8')
+  fs.writeFileSync(existingStatePath, JSON.stringify({ schemaVersion: 1, stateRevision: 0, activeChangeId: null }) + '\n', 'utf8')
 }
 
 if (mode === 'standard' || mode === 'enterprise') {
@@ -210,6 +241,7 @@ const results = [
     'state.json',
     renderJson({
       schemaVersion: 1,
+      activeChangeId: null,
       projectName: path.basename(target),
       mode,
       canonicalGoalSource: '',

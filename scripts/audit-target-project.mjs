@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { findCanonicalGoalSources, hasGoalMapProjectionBoundary } from './canonical-goal-source.mjs'
+import { inspectGseV1Project } from './core/migration-v1.mjs'
 
 const args = process.argv.slice(2)
 
@@ -16,7 +17,6 @@ function readArg(name, fallback = null) {
 const jsonOnly = args.includes('--json')
 const selfTest = args.includes('--self-test') || !args.includes('--target')
 const targetArg = readArg('--target')
-const root = path.resolve(readArg('--root', path.join(import.meta.dirname, '..')))
 
 function slash(value) {
   return value.replace(/\\/g, '/')
@@ -167,6 +167,9 @@ function auditTarget(target) {
   const evidenceIndexPath = path.join(resolvedTarget, '.gse', 'evidence', 'index.jsonl')
   const state = readJson(statePath)
   const evidenceIndex = readJsonl(evidenceIndexPath)
+  const compatibility = inspectGseV1Project(resolvedTarget)
+  const compatibilityCanonical = compatibility.reasonCode === 'PROJECT_STATE_V1_CANONICAL'
+  const compatibilityMigratable = compatibility.reasonCode === 'MIGRATION_INSPECTION_READY'
   checks.push(
     check(
       'TPD04',
@@ -318,14 +321,7 @@ function auditTarget(target) {
     ),
   )
 
-  const stateHasCoreFields =
-    state.ok &&
-    state.data?.schemaVersion === 1 &&
-    typeof state.data?.mode === 'string' &&
-    typeof state.data?.phase === 'string' &&
-    typeof state.data?.currentSlice?.status === 'string' &&
-    state.data?.toolStatuses &&
-    typeof state.data.toolStatuses === 'object'
+  const stateHasCoreFields = state.ok && compatibilityCanonical
   const evidenceIndexHasCoreFields =
     evidenceIndex.ok &&
     evidenceIndex.records.length > 0 &&
@@ -345,9 +341,27 @@ function auditTarget(target) {
     check(
       'TPD12',
       'machine-readable state and evidence index are present',
-      statusFrom(stateIndexOk, stateIndexWarn),
-      `state.json:${state.exists ? state.ok ? 'valid' : 'invalid ' + state.error : 'missing'}; evidence/index.jsonl:${evidenceIndex.exists ? evidenceIndex.ok ? `${evidenceIndex.records.length} record(s)` : 'invalid ' + evidenceIndex.error : 'missing'}`,
-      stateIndexOk ? '' : 'Add or repair .gse/state.json and .gse/evidence/index.jsonl so future sessions can continue without parsing long Markdown.',
+      statusFrom(stateIndexOk, stateIndexWarn || compatibilityMigratable),
+      `state.json:${state.exists ? state.ok ? compatibilityCanonical ? 'canonical' : compatibilityMigratable ? 'migration available' : 'invalid ' + compatibility.reasonCode : 'invalid ' + state.error : 'missing'}; evidence/index.jsonl:${evidenceIndex.exists ? evidenceIndex.ok ? `${evidenceIndex.records.length} record(s)` : 'invalid ' + evidenceIndex.error : 'missing'}`,
+      stateIndexOk
+        ? ''
+        : compatibilityMigratable
+          ? 'Review the Core v1 migration proposal and run /gse repair --execute only after approving its exact writes.'
+          : 'Add or deliberately repair .gse/state.json and .gse/evidence/index.jsonl so future sessions can continue safely.',
+    ),
+  )
+
+  checks.push(
+    check(
+      'TPD13',
+      'project state satisfies or can safely migrate to Core v1',
+      compatibilityCanonical ? 'passed' : compatibilityMigratable ? 'warning' : 'failed',
+      `${compatibility.status}:${compatibility.reasonCode}`,
+      compatibilityCanonical
+        ? ''
+        : compatibilityMigratable
+          ? 'Run /gse repair without --execute to review the proposal, then explicitly execute the shared migration.'
+          : 'Inspect compatibility diagnostics and repair malformed or ambiguous state deliberately.',
     ),
   )
 
@@ -370,9 +384,22 @@ function auditTarget(target) {
     state: {
       exists: state.exists,
       valid: stateHasCoreFields,
+      classification: compatibilityCanonical ? 'canonical' : compatibilityMigratable ? 'migratable' : 'invalid',
+      compatibilityStatus: compatibility.status,
+      reasonCode: compatibility.reasonCode,
+      stateRevision: compatibility.stateRevision ?? state.data?.stateRevision ?? null,
+      activeChangeId: state.data?.activeChangeId ?? null,
       phase: state.data?.phase ?? null,
       currentSliceStatus: state.data?.currentSlice?.status ?? null,
       lastEvidence: state.data?.lastEvidence ?? null,
+    },
+    compatibility: {
+      status: compatibility.status,
+      reasonCode: compatibility.reasonCode,
+      proposedWrites: Array.isArray(compatibility.proposedWrites) ? compatibility.proposedWrites : [],
+      sourceDigests: compatibility.sourceDigests ?? {},
+      migrationSummary: compatibility.migrationSummary ?? null,
+      diagnostics: compatibility.diagnostics ?? [],
     },
     evidenceIndex: {
       exists: evidenceIndex.exists,
@@ -412,6 +439,8 @@ function createFixture() {
     '.gse/README.md': '# GSE\n\nCanonical plan: `docs/productization-architecture.md`.\n',
     '.gse/state.json': JSON.stringify({
       schemaVersion: 1,
+      stateRevision: 0,
+      activeChangeId: null,
       projectName: 'fixture',
       mode: 'enterprise',
       canonicalGoalSource: 'docs/productization-architecture.md',
@@ -434,7 +463,7 @@ function createFixture() {
       residualRisks: [],
     }, null, 2) + '\n',
     '.gse/project-profile.md': '# Project Profile\n\nProduct/system name: fixture.\n',
-    '.gse/goal-map.md': '# Goal Map\n\nCanonical product goal source: `docs/productization-architecture.md`.\n\nThis file is a GSE execution projection. Canonical product goal source wins if this projection conflicts with product roadmap, architecture, PRD, or vision docs.\n\nNext action: continue.\n',
+    '.gse/goal-map.md': '# Goal Map\n\nCanonical product goal source: `docs/productization-architecture.md`.\n\nThis file is a GSE execution projection. Canonical product goal source wins if this projection conflicts with product roadmap, architecture, PRD, or vision docs. State.json tracks continuation state, evidence records verification history, and learnings retain reusable lessons.\n\nNext action: continue.\n',
     '.gse/goals/README.md': '# Goal Details\n',
     '.gse/quality-gates.md': '# Quality Gates\n\n## Universal\n\n## UI Gate\n',
     '.gse/tooling.md': '# Tooling\n',
@@ -477,6 +506,19 @@ function createFixture() {
   return dir
 }
 
+function createCompatibilityFixture(classification) {
+  const dir = createFixture()
+  const statePath = path.join(dir, '.gse', 'state.json')
+  if (classification === 'migratable') {
+    const state = JSON.parse(readText(statePath))
+    const { stateRevision, activeChangeId, toolStatuses, ...legacyState } = state
+    fs.writeFileSync(statePath, JSON.stringify({ ...legacyState, toolStatus: toolStatuses }, null, 2) + '\n', 'utf8')
+  } else if (classification === 'invalid') {
+    fs.writeFileSync(statePath, '{ invalid json\n', 'utf8')
+  }
+  return dir
+}
+
 function renderMarkdown(report) {
   const lines = []
   lines.push('# GSE Target Project Doctor')
@@ -505,11 +547,45 @@ function renderMarkdown(report) {
 }
 
 let report
-let fixtureDir = null
 if (selfTest) {
-  fixtureDir = createFixture()
-  report = auditTarget(fixtureDir)
-  report.selfTest = { fixtureDir }
+  const canonicalDir = createCompatibilityFixture('canonical')
+  const migratableDir = createCompatibilityFixture('migratable')
+  const invalidDir = createCompatibilityFixture('invalid')
+  report = auditTarget(canonicalDir)
+  const migratableReport = auditTarget(migratableDir)
+  const invalidReport = auditTarget(invalidDir)
+  const lifecycleChecks = [
+    check(
+      'TPDS01',
+      'canonical state is reported as canonical',
+      report.state.classification === 'canonical' && report.compatibility.reasonCode === 'PROJECT_STATE_V1_CANONICAL' ? 'passed' : 'failed',
+      `${report.state.classification}:${report.compatibility.reasonCode}`,
+    ),
+    check(
+      'TPDS02',
+      'safe legacy state is reported as migration available',
+      migratableReport.state.classification === 'migratable' && migratableReport.compatibility.reasonCode === 'MIGRATION_INSPECTION_READY' && migratableReport.checks.find((item) => item.id === 'TPD13')?.status === 'warning' ? 'passed' : 'failed',
+      `${migratableReport.state.classification}:${migratableReport.compatibility.reasonCode}`,
+    ),
+    check(
+      'TPDS03',
+      'malformed state is reported as invalid and repair required',
+      invalidReport.state.classification === 'invalid' && invalidReport.summary.failed > 0 && invalidReport.checks.find((item) => item.id === 'TPD13')?.status === 'failed' ? 'passed' : 'failed',
+      `${invalidReport.state.classification}:${invalidReport.compatibility.reasonCode}`,
+    ),
+  ]
+  const lifecycleFailed = lifecycleChecks.filter((item) => item.status === 'failed').length
+  report.selfTest = {
+    fixtureDir: canonicalDir,
+    fixtures: { canonicalDir, migratableDir, invalidDir },
+    summary: {
+      status: lifecycleFailed === 0 ? 'passed' : 'failed',
+      passed: lifecycleChecks.length - lifecycleFailed,
+      failed: lifecycleFailed,
+      total: lifecycleChecks.length,
+    },
+    checks: lifecycleChecks,
+  }
 } else {
   report = auditTarget(targetArg)
 }
@@ -517,4 +593,4 @@ if (selfTest) {
 if (jsonOnly) console.log(JSON.stringify(report, null, 2))
 else console.log(renderMarkdown(report))
 
-if (report.summary.failed > 0) process.exit(1)
+if (report.summary.failed > 0 || report.selfTest?.summary?.failed > 0) process.exit(1)

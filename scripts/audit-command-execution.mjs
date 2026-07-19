@@ -3,8 +3,6 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
-import { executeTransaction } from './core/persistence/transaction.mjs'
 
 const args = process.argv.slice(2)
 
@@ -43,6 +41,32 @@ function parseJson(text) {
   try { return JSON.parse(text) } catch { return null }
 }
 
+function snapshotTree(dir) {
+  if (!fs.existsSync(dir)) return []
+  const entries = []
+  function visit(current, relative = '') {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const childRelative = path.join(relative, entry.name)
+      const child = path.join(current, entry.name)
+      if (entry.isDirectory()) visit(child, childRelative)
+      else if (entry.isFile()) entries.push([childRelative.replace(/\\/g, '/'), fs.readFileSync(child, 'base64')])
+    }
+  }
+  visit(dir)
+  return entries
+}
+
+function writeUpdateFixture(targetDir, stateContent) {
+  fs.mkdirSync(path.join(targetDir, '.gse', 'evidence'), { recursive: true })
+  fs.mkdirSync(path.join(targetDir, 'docs'), { recursive: true })
+  fs.writeFileSync(path.join(targetDir, '.gse', 'README.md'), '# GSE\n\nCanonical plan: `docs/productization-architecture.md`.\n', 'utf8')
+  fs.writeFileSync(path.join(targetDir, '.gse', 'project-profile.md'), '# Project Profile\n\n- Product/system name: Update Fixture.\n', 'utf8')
+  fs.writeFileSync(path.join(targetDir, '.gse', 'goal-map.md'), '# Goal Map\n\n## Current Focus\n\n- Active slice: Preserve update lifecycle.\n- Next action: Verify update lifecycle.\n', 'utf8')
+  fs.writeFileSync(path.join(targetDir, '.gse', 'quality-gates.md'), '# Quality Gates\n\n## Universal\n', 'utf8')
+  fs.writeFileSync(path.join(targetDir, 'docs', 'productization-architecture.md'), '# Plan\n', 'utf8')
+  fs.writeFileSync(path.join(targetDir, '.gse', 'state.json'), stateContent, 'utf8')
+}
+
 function check(id, label, ok, evidence, risk = '') {
   return { id, label, status: ok ? 'passed' : 'failed', evidence, risk }
 }
@@ -62,6 +86,86 @@ const initPreviewWasReadOnly = !fs.existsSync(path.join(target, '.gse'))
 const initRun = run('run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse init --mode standard', '--execute', '--json'])
 const init = parseJson(initRun.stdout)
 const initData = parseJson(init?.execution?.stdout || '')
+const initializedStatePath = path.join(target, '.gse', 'state.json')
+const initializedState = parseJson(fs.readFileSync(initializedStatePath, 'utf8'))
+const initializedStateText = fs.readFileSync(initializedStatePath, 'utf8')
+const initRerun = run('init-project.mjs', ['--target', target, '--mode', 'standard'])
+const initRerunData = parseJson(initRerun.stdout)
+const initRerunPreservedState = fs.readFileSync(initializedStatePath, 'utf8') === initializedStateText
+const initForceRerun = run('init-project.mjs', ['--target', target, '--mode', 'standard', '--force'])
+const initForceRerunData = parseJson(initForceRerun.stdout)
+const initForcePreservedState = fs.readFileSync(initializedStatePath, 'utf8') === initializedStateText
+
+const legacyInitTarget = path.join(target, 'legacy-init-project')
+fs.mkdirSync(path.join(legacyInitTarget, '.gse'), { recursive: true })
+fs.writeFileSync(path.join(legacyInitTarget, '.gse', 'state.json'), JSON.stringify({
+  schemaVersion: 1,
+  projectName: 'legacy-init-project',
+  mode: 'lite',
+  phase: 'execute',
+  currentSlice: { id: 'legacy', outcome: 'preserve legacy state', status: 'planned', nextAction: 'review migration' },
+  toolStatus: { browser: 'unknown', lsp: 'unknown', mcp: 'unknown', subagents: 'unknown', ci: 'unknown' },
+  lastEvidence: '.gse/evidence/index.jsonl',
+  residualRisks: ['legacy risk'],
+}, null, 2) + '\n', 'utf8')
+const legacyInitBefore = snapshotTree(legacyInitTarget)
+const legacyInitRun = run('init-project.mjs', ['--target', legacyInitTarget, '--mode', 'lite'])
+const legacyInitData = parseJson(legacyInitRun.stdout)
+const legacyInitAfter = snapshotTree(legacyInitTarget)
+
+const malformedInitTarget = path.join(target, 'malformed-init-project')
+fs.mkdirSync(path.join(malformedInitTarget, '.gse'), { recursive: true })
+fs.writeFileSync(path.join(malformedInitTarget, '.gse', 'state.json'), '{ invalid json\n', 'utf8')
+const malformedInitBefore = snapshotTree(malformedInitTarget)
+const malformedInitRun = run('init-project.mjs', ['--target', malformedInitTarget, '--mode', 'lite', '--force'])
+const malformedInitData = parseJson(malformedInitRun.stdout)
+const malformedInitAfter = snapshotTree(malformedInitTarget)
+
+const canonicalUpdateTarget = path.join(target, 'canonical-update-project')
+writeUpdateFixture(canonicalUpdateTarget, JSON.stringify({
+  schemaVersion: 1,
+  stateRevision: 4,
+  activeChangeId: null,
+  projectName: 'canonical-update-project',
+  mode: 'lite',
+  phase: 'execute',
+  currentSlice: { id: 'canonical-update', outcome: 'preserve update state', status: 'planned', nextAction: 'run update' },
+  toolStatuses: { browser: 'unknown', lsp: 'unknown', mcp: 'unknown', subagents: 'unknown', ci: 'unknown' },
+  lastEvidence: '.gse/evidence/index.jsonl',
+  residualRisks: [],
+}, null, 2) + '\n')
+const canonicalUpdateRun = run('update-project-state.mjs', ['--target', canonicalUpdateTarget, '--json'])
+const canonicalUpdateData = parseJson(canonicalUpdateRun.stdout)
+const canonicalUpdatedState = parseJson(fs.readFileSync(path.join(canonicalUpdateTarget, '.gse', 'state.json'), 'utf8'))
+
+const legacyUpdateTarget = path.join(target, 'legacy-update-project')
+writeUpdateFixture(legacyUpdateTarget, JSON.stringify({
+  schemaVersion: 1,
+  projectName: 'legacy-update-project',
+  mode: 'lite',
+  phase: 'execute',
+  currentSlice: { id: 'legacy-update', outcome: 'migrate update state', status: 'planned', nextAction: 'review migration' },
+  toolStatus: { browser: 'unknown', lsp: 'unknown', mcp: 'unknown', subagents: 'unknown', ci: 'unknown' },
+  lastEvidence: '.gse/evidence/index.jsonl',
+  residualRisks: ['legacy update risk'],
+}, null, 2) + '\n')
+const legacyUpdateBefore = snapshotTree(legacyUpdateTarget)
+const legacyUpdatePreviewRun = run('update-project-state.mjs', ['--target', legacyUpdateTarget, '--json'])
+const legacyUpdatePreview = parseJson(legacyUpdatePreviewRun.stdout)
+const legacyUpdateAfterPreview = snapshotTree(legacyUpdateTarget)
+const legacyUpdateExecuteRun = run('update-project-state.mjs', ['--target', legacyUpdateTarget, '--execute', '--json'])
+const legacyUpdateExecute = parseJson(legacyUpdateExecuteRun.stdout)
+const migratedUpdateState = parseJson(fs.readFileSync(path.join(legacyUpdateTarget, '.gse', 'state.json'), 'utf8'))
+const legacyUpdateRerun = run('update-project-state.mjs', ['--target', legacyUpdateTarget, '--json'])
+const legacyUpdateRerunData = parseJson(legacyUpdateRerun.stdout)
+const rerunUpdateState = parseJson(fs.readFileSync(path.join(legacyUpdateTarget, '.gse', 'state.json'), 'utf8'))
+
+const malformedUpdateTarget = path.join(target, 'malformed-update-project')
+writeUpdateFixture(malformedUpdateTarget, '{ malformed json\n')
+const malformedUpdateBefore = snapshotTree(malformedUpdateTarget)
+const malformedUpdateRun = run('update-project-state.mjs', ['--target', malformedUpdateTarget, '--force', '--json'])
+const malformedUpdateData = parseJson(malformedUpdateRun.stdout)
+const malformedUpdateAfter = snapshotTree(malformedUpdateTarget)
 fs.mkdirSync(path.join(target, 'docs'), { recursive: true })
 fs.writeFileSync(path.join(target, 'docs', 'productization-architecture.md'), '# Productization Architecture\n', 'utf8')
 fs.appendFileSync(path.join(target, '.gse', 'README.md'), '\nCanonical plan: `docs/productization-architecture.md`.\n', 'utf8')
@@ -164,24 +268,25 @@ const closeRun = maybeRun(full, 'run-gse-command.mjs', ['--root', root, '--targe
 if (full) {
   const statePath = path.join(target, '.gse', 'state.json')
   const stateForRepair = JSON.parse(fs.readFileSync(statePath, 'utf8'))
-  const transaction = await executeTransaction({
-    target,
-    operationId: 'command-execution-repair-fixture',
-    expectedRevision: stateForRepair.stateRevision,
-    writes: [{
-      kind: 'json-replace',
-      path: '.gse/state.json',
-      value: {
-        ...stateForRepair,
-        residualRisks: Array.from({ length: 9 }, (_, index) => `Command repair fixture risk ${index + 1}.`),
-      },
-    }],
-    events: [],
-    allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
-  })
-  if (transaction.status !== 'complete') throw new Error(transaction.message)
+  const { stateRevision, activeChangeId, toolStatuses, ...legacyState } = stateForRepair
+  fs.writeFileSync(
+    statePath,
+    JSON.stringify({
+      ...legacyState,
+      toolStatus: toolStatuses,
+      residualRisks: Array.from({ length: 8 }, (_, index) => `Command repair fixture risk ${index + 1}.`),
+      riskArchive: [{
+        archivedAt: '2026-07-01T00:00:00.000Z',
+        risk: 'Previously archived command repair fixture risk.',
+        resolution: 'Command migration fixture.',
+      }],
+    }, null, 2) + '\n',
+    'utf8',
+  )
 }
-const repairExecuteRun = maybeRun(full, 'run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse repair --max-active-risks 3', '--execute', '--json'])
+const repairPreviewRun = maybeRun(full, 'run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse repair', '--json'])
+const repairExecuteRun = maybeRun(full, 'run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse repair --max-risk-length 260', '--execute', '--json'])
+const repairRerun = maybeRun(full, 'run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse repair', '--json'])
 const changeRun = maybeRun(full, 'run-gse-command.mjs', ['--root', root, '--target', target, '--command', '/gse change add-login --level lite', '--execute', '--json'])
 
 const help = parseJson(helpRun.stdout)
@@ -207,6 +312,10 @@ const close = closeRun ? parseJson(closeRun.stdout) : null
 const change = changeRun ? parseJson(changeRun.stdout) : null
 const repairExecute = repairExecuteRun ? parseJson(repairExecuteRun.stdout) : null
 const repairExecuteData = repairExecute ? parseJson(repairExecute.execution?.stdout ?? '') : null
+const repairPreview = repairPreviewRun ? parseJson(repairPreviewRun.stdout) : null
+const repairPreviewData = repairPreview ? parseJson(repairPreview.execution?.stdout ?? '') : null
+const repairRerunReport = repairRerun ? parseJson(repairRerun.stdout) : null
+const repairRerunData = repairRerunReport ? parseJson(repairRerunReport.execution?.stdout ?? '') : null
 const doctorData = doctor ? parseJson(doctor.execution?.stdout ?? '') : null
 const doctorTargetData = doctorTarget ? parseJson(doctorTarget.execution?.stdout ?? '') : null
 const auditData = audit ? parseJson(audit.execution?.stdout ?? '') : null
@@ -233,6 +342,27 @@ const publicReleaseExecuteReport = publicReleaseExecuteRun ? parseJson(publicRel
 const publicReleaseDryRunData = publicReleaseDryRunReport ? parseJson(publicReleaseDryRunReport.execution?.stdout ?? '') : null
 const publicReleaseExecuteData = publicReleaseExecuteReport ? parseJson(publicReleaseExecuteReport.execution?.stdout ?? '') : null
 
+const repairCommandConditions = full
+  ? {
+      previewStatus: repairPreviewRun.status === 0,
+      previewReason: repairPreviewData?.compatibility?.reasonCode === 'MIGRATION_INSPECTION_READY',
+      previewWrites: repairPreviewData?.summary?.writes === 0,
+      executeStatus: repairExecuteRun.status === 0,
+      childStatus: repairExecute?.execution?.status === 0,
+      executeReason: repairExecuteData?.compatibility?.reasonCode === 'TRANSACTION_COMMITTED',
+      migrationStatus: repairExecuteData?.migration?.status === 'complete',
+      revision: repairExecuteData?.state?.stateRevision === 1,
+      archiveRemoved: repairExecuteData?.state?.embeddedRiskArchive === 0,
+      historyCount: repairExecuteData?.riskHistory?.records === 3,
+      stateWrite: repairExecuteData?.writes?.some((item) => item.action === 'core-v1-migration' && item.targetPath === '.gse/state.json') === true,
+      historyExists: fs.existsSync(path.join(target, '.gse', 'risk-history.jsonl')),
+      noBackups: !fs.existsSync(path.join(target, '.gse', 'backups')),
+      rerunStatus: repairRerun.status === 0,
+      rerunReason: repairRerunData?.compatibility?.reasonCode === 'PROJECT_STATE_V1_CANONICAL',
+      rerunWrites: repairRerunData?.summary?.writes === 0,
+    }
+  : {}
+
 const claudeCommand = fs.existsSync(path.join(target, '.claude', 'commands', 'gse.md'))
   ? fs.readFileSync(path.join(target, '.claude', 'commands', 'gse.md'), 'utf8')
   : ''
@@ -249,7 +379,16 @@ const geminiPointer = fs.existsSync(path.join(target, 'GEMINI.md'))
 const liteChecks = [
   check('CMDX01', 'portable command runner exists', fs.existsSync(path.join(root, 'scripts', 'run-gse-command.mjs')), 'scripts/run-gse-command.mjs'),
   check('CMDX02a', '/gse init previews without writing', initPreviewRun.status === 0 && initPreviewData?.status === 'preview' && initPreviewData?.writes?.performed === false && initPreviewWasReadOnly, '/gse init --mode standard'),
-  check('CMDX02b', '/gse init --execute initializes the target through the public runner', initRun.status === 0 && init?.execution?.status === 0 && Array.isArray(initData?.results) && initData.results.some((item) => item.relativePath === 'state.json') && fs.existsSync(path.join(target, '.gse', 'state.json')) && fs.readFileSync(path.join(target, 'AGENTS.md'), 'utf8') === agentsSentinel, '/gse init --mode standard --execute'),
+  check('CMDX02b', '/gse init --execute initializes the target through the public runner', initRun.status === 0 && init?.execution?.status === 0 && Array.isArray(initData?.results) && initData.results.some((item) => item.relativePath === 'state.json') && initializedState?.schemaVersion === 1 && Number.isInteger(initializedState?.stateRevision) && initializedState.stateRevision >= 1 && initializedState?.activeChangeId === null && fs.readFileSync(path.join(target, 'AGENTS.md'), 'utf8') === agentsSentinel, '/gse init --mode standard --execute'),
+  check('CMDX02c', 'canonical init rerun preserves existing project state', initRerun.status === 0 && Array.isArray(initRerunData?.results) && initRerunData.results.find((item) => item.relativePath === 'state.json')?.status === 'skipped' && initRerunPreservedState, 'direct init-project canonical rerun'),
+  check('CMDX02d', 'canonical init --force still preserves existing project state', initForceRerun.status === 0 && Array.isArray(initForceRerunData?.results) && initForceRerunData.results.find((item) => item.relativePath === 'state.json')?.status === 'skipped' && initForcePreservedState, 'direct init-project canonical --force rerun'),
+  check('CMDX02e', 'legacy init returns an exact migration proposal with zero writes', legacyInitRun.status !== 0 && legacyInitData?.reasonCode === 'MIGRATION_INSPECTION_READY' && legacyInitData?.proposedWrites?.some((item) => item.path === '.gse/state.json') && JSON.stringify(legacyInitAfter) === JSON.stringify(legacyInitBefore), 'direct init-project legacy fixture'),
+  check('CMDX02f', 'malformed init fails closed and --force performs zero scaffold writes', malformedInitRun.status !== 0 && !['proceed', 'complete'].includes(malformedInitData?.status) && typeof malformedInitData?.reasonCode === 'string' && malformedInitData.reasonCode !== 'MIGRATION_INSPECTION_READY' && malformedInitData?.results?.length === 0 && JSON.stringify(malformedInitAfter) === JSON.stringify(malformedInitBefore), JSON.stringify({ status: malformedInitData?.status ?? null, reasonCode: malformedInitData?.reasonCode ?? null, treePreserved: JSON.stringify(malformedInitAfter) === JSON.stringify(malformedInitBefore) })),
+  check('CMDX02g', 'canonical update enters the transaction with defined revision and active Change identity', canonicalUpdateRun.status === 0 && canonicalUpdateData?.summary?.status === 'passed' && canonicalUpdatedState?.stateRevision === 5 && canonicalUpdatedState?.activeChangeId === null, JSON.stringify({ status: canonicalUpdateData?.summary?.status ?? null, stateRevision: canonicalUpdatedState?.stateRevision ?? null, activeChangeId: canonicalUpdatedState?.activeChangeId ?? 'missing' })),
+  check('CMDX02h', 'legacy update defaults to an exact read-only migration proposal', legacyUpdatePreviewRun.status === 0 && legacyUpdatePreview?.summary?.status === 'migration-available' && legacyUpdatePreview?.migration?.reasonCode === 'MIGRATION_INSPECTION_READY' && legacyUpdatePreview?.results?.some((item) => item.relativePath === '.gse/state.json' && item.status === 'would-write') && JSON.stringify(legacyUpdateAfterPreview) === JSON.stringify(legacyUpdateBefore), 'direct update legacy preview'),
+  check('CMDX02i', 'legacy update migrates only with explicit execution', legacyUpdateExecuteRun.status === 0 && legacyUpdateExecute?.summary?.status === 'passed' && legacyUpdateExecute?.migration?.reasonCode === 'TRANSACTION_COMMITTED' && migratedUpdateState?.stateRevision === 1 && migratedUpdateState?.activeChangeId === null && !Object.hasOwn(migratedUpdateState ?? {}, 'toolStatus'), JSON.stringify({ status: legacyUpdateExecute?.summary?.status ?? null, reasonCode: legacyUpdateExecute?.migration?.reasonCode ?? null, stateRevision: migratedUpdateState?.stateRevision ?? null })),
+  check('CMDX02j', 'post-migration update rerun follows the canonical transaction path', legacyUpdateRerun.status === 0 && legacyUpdateRerunData?.summary?.status === 'passed' && !legacyUpdateRerunData?.migration && rerunUpdateState?.stateRevision === 2 && rerunUpdateState?.activeChangeId === null, JSON.stringify({ status: legacyUpdateRerunData?.summary?.status ?? null, stateRevision: rerunUpdateState?.stateRevision ?? null })),
+  check('CMDX02k', 'malformed update fails closed and --force cannot bypass it', malformedUpdateRun.status !== 0 && malformedUpdateData?.summary?.status === 'failed' && malformedUpdateData?.results?.length === 0 && malformedUpdateData?.recommendation?.includes('--force does not bypass') && JSON.stringify(malformedUpdateAfter) === JSON.stringify(malformedUpdateBefore), JSON.stringify({ status: malformedUpdateData?.summary?.status ?? null, treePreserved: JSON.stringify(malformedUpdateAfter) === JSON.stringify(malformedUpdateBefore) })),
   check('CMDX03', 'host command adapters are generated', adapterRun.status === 0 && claudeCommand.includes('run-gse-command.mjs') && codexPointer.includes('run-gse-command.mjs') && copilotPointer.includes('GitHub Copilot GSE Adapter') && geminiPointer.includes('Gemini GSE Adapter'), 'generated supported host adapters'),
   check('CMDX04a', '/gse help renders the authoritative registry outside a GSE project', helpRun.status === 0 && help?.execution?.status === 0 && helpData?.status === 'ready' && helpData?.commands?.length === Object.keys(helpData?.commands ?? {}).length && helpData?.commands?.some((item) => item.command === '/gse adopt' && item.effect.includes('write-with-execute')), '/gse help'),
   check('CMDX04b', 'unknown commands fail distinctly and point to help', unknownRun.status !== 0 && unknown?.coreResult?.reasonCode === 'UNKNOWN_COMMAND' && unknownData?.status === 'unknown-command' && unknownData?.help === '/gse help', '/gse unsupported-command'),
@@ -297,14 +436,24 @@ const fullChecks = full
       check('CMDX20', '/gse close remains a readiness check and adds a close envelope', close?.coreResult?.stage === 'close' && !close?.execution?.command?.includes('release'), '/gse close'),
       check('CMDX21', 'release remains post-Close and outside the five-stage facade', releaseDryRunReport?.coreResult?.stage === null && releaseDryRunReport?.coreResult?.reasonCode === 'POST_CLOSE_RELEASE', '/gse release'),
       check('CMDX13', '/gse change executes change pack creation only with --execute', changeRun.status === 0 && change?.execution?.status === 0 && fs.existsSync(path.join(target, '.gse', 'changes', 'add-login', 'brief.md')), '/gse change --execute'),
-      check('CMDX14', '/gse repair --execute performs reversible residual risk compaction only when requested', repairExecuteRun.status === 0 && repairExecute?.execution?.status === 0 && repairExecuteData?.summary?.writes === 1 && repairExecuteData?.writes?.some((item) => item.action === 'compact-residual-risks') && fs.existsSync(path.join(target, '.gse', 'backups')), '/gse repair --execute'),
+      check(
+        'CMDX14',
+        '/gse repair is read-only by default and explicitly migrates safe legacy state',
+        Object.values(repairCommandConditions).every(Boolean),
+        JSON.stringify({
+          ...repairCommandConditions,
+          actualRerunReason: repairRerunData?.compatibility?.reasonCode ?? null,
+          rerunProposedWrites: repairRerunData?.compatibility?.proposedWrites ?? [],
+          rerunDiagnostics: repairRerunData?.compatibility?.diagnostics ?? [],
+        }),
+      ),
     ]
   : []
 
 const checks = [...liteChecks, ...fullChecks]
 const passed = checks.filter((item) => item.status === 'passed').length
 const failed = checks.length - passed
-const commandRuns = [initPreviewRun, initRun, adapterRun, helpRun, unknownRun, adoptPreviewRun, adoptExecuteRun, sliceRun, continueRun, stageRun, discoverRun, discoverySelectRun, discoveryPromoteRun, repairRun, frameRun, specifyRun, buildRun, shortCliRun, statusRun, doctorRun, acceptanceRun, ownerActionsRun, ownerActionsCompactRun, probeWaitingRun, probeRejectRun, releaseDryRun, releaseExecuteRun, packageDryRun, packageExecuteRun, installDryRun, installExecuteRun, installPreserveRun, installForceRun, publicReleaseDryRun, publicReleaseExecuteRun, doctorTargetRun, verifyRun, auditRun, closeRun, changeRun, repairExecuteRun].filter(Boolean)
+const commandRuns = [initPreviewRun, initRun, adapterRun, helpRun, unknownRun, adoptPreviewRun, adoptExecuteRun, sliceRun, continueRun, stageRun, discoverRun, discoverySelectRun, discoveryPromoteRun, repairRun, frameRun, specifyRun, buildRun, shortCliRun, statusRun, doctorRun, acceptanceRun, ownerActionsRun, ownerActionsCompactRun, probeWaitingRun, probeRejectRun, releaseDryRun, releaseExecuteRun, packageDryRun, packageExecuteRun, installDryRun, installExecuteRun, installPreserveRun, installForceRun, publicReleaseDryRun, publicReleaseExecuteRun, doctorTargetRun, verifyRun, auditRun, closeRun, changeRun, repairPreviewRun, repairExecuteRun, repairRerun].filter(Boolean)
 const report = {
   root,
   generatedAt: new Date().toISOString(),

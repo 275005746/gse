@@ -124,10 +124,11 @@ async function guardedImport(relativeModulePath) {
   }
 }
 
-const [changeStateImport, migrationImport, evidenceImport] = await Promise.all([
+const [changeStateImport, migrationImport, evidenceImport, projectStateImport] = await Promise.all([
   guardedImport('./core/change-state.mjs'),
   guardedImport('./core/migration-v1.mjs'),
   guardedImport('./core/evidence.mjs'),
+  guardedImport('./core/project-state-v1.mjs'),
 ])
 
 function unavailableFunction(functionName, moduleImport, modulePath) {
@@ -308,6 +309,168 @@ async function runFixtureProbe(fixtureId, operation, setup = null) {
     }
   } finally {
     if (temporaryDirectory) fs.rmSync(temporaryDirectory, { recursive: true, force: true })
+  }
+}
+
+async function runExecutableMigrationProbes() {
+  const inspect = migrationImport.module?.inspectGseV1Project
+  const execute = migrationImport.module?.executeGseV1Migration
+  if (typeof inspect !== 'function' || typeof execute !== 'function') {
+    const unavailable = unavailableFunction('Executable migration exports', migrationImport, './core/migration-v1.mjs')
+    return {
+      available: false,
+      migration: unavailable,
+      drift: unavailable,
+      malformedLedger: unavailable,
+      duplicateEventId: unavailable,
+      duplicateDeduplicationKey: unavailable,
+    }
+  }
+
+  const temporaryDirectories = []
+  const copyFixture = (label) => {
+    const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), `gse-core-execute-${label}-`))
+    temporaryDirectories.push(temporaryDirectory)
+    const target = path.join(temporaryDirectory, 'project')
+    fs.cpSync(path.join(fixtureRoot, 'legacy-lite'), target, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    })
+    return target
+  }
+  const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^﻿/, ''))
+  const readJsonl = (filePath) => fs.existsSync(filePath)
+    ? fs.readFileSync(filePath, 'utf8').trimEnd().split('\n').filter(Boolean).map((line) => JSON.parse(line))
+    : []
+  const transactionManifests = (target) => {
+    const rootPath = path.join(target, '.gse', 'transactions')
+    if (!fs.existsSync(rootPath)) return []
+    return fs.readdirSync(rootPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(rootPath, entry.name, 'manifest.json'))
+      .filter((filePath) => fs.existsSync(filePath))
+      .map(readJson)
+  }
+  const legacySetup = (target) => {
+    const statePath = path.join(target, '.gse', 'state.json')
+    const state = readJson(statePath)
+    delete state.stateRevision
+    state.toolStatus = { lsp: 'verified' }
+    state.residualRisks = [
+      'active risk 1',
+      'active risk 2',
+      'active risk 3',
+      'active risk 4',
+      'active risk 5',
+      'active risk 6',
+      'overflow risk 1',
+      'overflow risk 2',
+    ]
+    state.riskArchive = [{
+      risk: 'legacy archived risk',
+      archivedAt: '2026-07-01T00:00:00.000Z',
+      resolution: 'Resolved before Core v1 migration.',
+    }]
+    fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`)
+  }
+  const ledgerRecord = (eventId, deduplicationKey, risk) => ({
+    schemaVersion: 1,
+    eventId,
+    transactionId: null,
+    recordType: 'risk-history',
+    riskId: `risk-${eventId}`,
+    deduplicationKey,
+    risk,
+    sourceRevision: 0,
+    archivedAt: '2026-07-01T00:00:00.000Z',
+    resolution: 'Legacy committed ledger fixture.',
+    stateRevision: 0,
+  })
+
+  try {
+    const migrationTarget = copyFixture('migration')
+    legacySetup(migrationTarget)
+    const dryRun = await Promise.resolve(inspect(migrationTarget))
+    const first = await Promise.resolve(execute(migrationTarget, { sourceDigests: dryRun.sourceDigests }))
+    const stateAfterFirst = readJson(path.join(migrationTarget, '.gse', 'state.json'))
+    const ledgerPath = path.join(migrationTarget, '.gse', 'risk-history.jsonl')
+    const ledgerAfterFirst = readJsonl(ledgerPath)
+    const manifestsAfterFirst = transactionManifests(migrationTarget)
+    const second = await Promise.resolve(execute(migrationTarget))
+    const stateAfterSecond = readJson(path.join(migrationTarget, '.gse', 'state.json'))
+    const ledgerAfterSecond = readJsonl(ledgerPath)
+    const manifestsAfterSecond = transactionManifests(migrationTarget)
+    const riskWrites = manifestsAfterFirst.flatMap((manifest) => manifest.writes ?? [])
+      .filter((write) => write.kind === 'jsonl-append' && write.path === '.gse/risk-history.jsonl')
+
+    const driftTarget = copyFixture('drift')
+    legacySetup(driftTarget)
+    const driftInspection = await Promise.resolve(inspect(driftTarget))
+    const driftStatePath = path.join(driftTarget, '.gse', 'state.json')
+    const driftState = readJson(driftStatePath)
+    driftState.currentSummary = 'Changed after the reviewed inspection.'
+    fs.writeFileSync(driftStatePath, `${JSON.stringify(driftState, null, 2)}\n`)
+    const drift = await Promise.resolve(execute(driftTarget, { sourceDigests: driftInspection.sourceDigests }))
+
+    const malformedTarget = copyFixture('malformed-ledger')
+    fs.writeFileSync(path.join(malformedTarget, '.gse', 'risk-history.jsonl'), '{"incomplete":true')
+    const malformedLedger = await Promise.resolve(inspect(malformedTarget))
+
+    const duplicateEventTarget = copyFixture('duplicate-event')
+    const duplicateEventDigestA = `sha256:${'a'.repeat(64)}`
+    const duplicateEventDigestB = `sha256:${'b'.repeat(64)}`
+    fs.writeFileSync(
+      path.join(duplicateEventTarget, '.gse', 'risk-history.jsonl'),
+      `${JSON.stringify(ledgerRecord('duplicate-event', duplicateEventDigestA, 'risk a'))}\n${JSON.stringify(ledgerRecord('duplicate-event', duplicateEventDigestB, 'risk b'))}\n`,
+    )
+    const duplicateEventId = await Promise.resolve(inspect(duplicateEventTarget))
+
+    const duplicateDedupTarget = copyFixture('duplicate-dedup')
+    const duplicateDedupDigest = `sha256:${'c'.repeat(64)}`
+    fs.writeFileSync(
+      path.join(duplicateDedupTarget, '.gse', 'risk-history.jsonl'),
+      `${JSON.stringify(ledgerRecord('event-a', duplicateDedupDigest, 'risk c'))}\n${JSON.stringify(ledgerRecord('event-b', duplicateDedupDigest, 'risk d'))}\n`,
+    )
+    const duplicateDeduplicationKey = await Promise.resolve(inspect(duplicateDedupTarget))
+
+    return {
+      available: true,
+      migration: {
+        dryRun,
+        first,
+        second,
+        stateAfterFirst,
+        stateAfterSecond,
+        ledgerAfterFirst,
+        ledgerAfterSecond,
+        manifestsAfterFirst,
+        manifestsAfterSecond,
+        riskWrites,
+      },
+      drift: {
+        result: drift,
+        transactionCount: transactionManifests(driftTarget).length,
+        stateHasRevision: Object.hasOwn(readJson(driftStatePath), 'stateRevision'),
+      },
+      malformedLedger,
+      duplicateEventId,
+      duplicateDeduplicationKey,
+    }
+  } catch (error) {
+    const unavailable = failedProbe(error)
+    return {
+      available: false,
+      migration: unavailable,
+      drift: unavailable,
+      malformedLedger: unavailable,
+      duplicateEventId: unavailable,
+      duplicateDeduplicationKey: unavailable,
+    }
+  } finally {
+    for (const temporaryDirectory of temporaryDirectories) {
+      fs.rmSync(temporaryDirectory, { recursive: true, force: true })
+    }
   }
 }
 
@@ -634,6 +797,33 @@ async function runEvidenceProbes() {
 }
 
 const evidenceProbes = await runEvidenceProbes()
+const executableMigrationProbes = await runExecutableMigrationProbes()
+const inspectState = projectStateImport.module?.inspectProjectStateV1
+const canonicalFixtureState = {
+  schemaVersion: 1,
+  stateRevision: 4,
+  activeChangeId: null,
+  residualRisks: ['active'],
+  riskHistoryPath: '.gse/risk-history.jsonl',
+  archivedRiskCount: 2,
+}
+const canonicalStateProbe = typeof inspectState === 'function'
+  ? inspectState(canonicalFixtureState)
+  : unavailableFunction('inspectProjectStateV1', projectStateImport, './core/project-state-v1.mjs')
+const aliasStateProbe = typeof inspectState === 'function'
+  ? inspectState({ schemaVersion: 1, projectName: 'legacy', toolStatus: { lsp: 'verified' } })
+  : unavailableFunction('inspectProjectStateV1', projectStateImport, './core/project-state-v1.mjs')
+const aliasConflictProbe = typeof inspectState === 'function'
+  ? inspectState({ schemaVersion: 1, toolStatuses: { lsp: 'verified' }, toolStatus: { lsp: 'unknown' } })
+  : unavailableFunction('inspectProjectStateV1', projectStateImport, './core/project-state-v1.mjs')
+const riskCompactionProbe = typeof inspectState === 'function'
+  ? inspectState({
+      schemaVersion: 1,
+      projectName: 'legacy-risk',
+      residualRisks: ['active', 'duplicate history', 'duplicate history'],
+      riskArchive: [{ risk: 'older history', archivedAt: '2026-07-01', resolution: 'resolved' }],
+    }, { activeRiskLimit: 1, archivedAt: '2026-07-19T00:00:00.000Z' })
+  : unavailableFunction('inspectProjectStateV1', projectStateImport, './core/project-state-v1.mjs')
 const allCreatedPaths = probes.flatMap((probe) => probe.createdPaths)
 const generatedPaths = allCreatedPaths.filter(isInspectionGeneratedPath)
 const allProbesAvailable = probes.every((probe) => probe.available)
@@ -652,13 +842,16 @@ const checks = [
   ),
   check(
     'COMP02',
-    'legacy Lite inspection proposes revision fields without writes',
+    'canonical Lite inspection returns a byte-preserving no-op',
     lite.available
-      && resultField(lite.result, 'status') === 'proceed'
+      && resultField(lite.result, 'status') === 'complete'
+      && resultField(lite.result, 'reasonCode') === 'PROJECT_STATE_V1_CANONICAL'
       && liteProjectState?.stateRevision === 0
+      && Array.isArray(resultField(lite.result, 'proposedWrites'))
+      && resultField(lite.result, 'proposedWrites').length === 0
       && lite.bytesEqual,
     { result: lite.result, byteEquality: lite.bytesEqual },
-    'Inspection must remain byte-preserving and return a proposed state rather than persist it.',
+    'Canonical inspection must remain byte-preserving and avoid unnecessary migration writes.',
   ),
   check(
     'COMP03',
@@ -707,6 +900,99 @@ const checks = [
         .flatMap((probe) => probe.result?.diagnostics ?? []),
     },
     'Inspection probes must execute before absence of created paths can establish read-only behavior.',
+  ),
+  check(
+    'COMP06a',
+    'Core v1 state compatibility classifies canonical state idempotently',
+    canonicalStateProbe.classification === 'canonical'
+      && canonicalStateProbe.normalizedState?.schemaVersion === canonicalFixtureState.schemaVersion
+      && canonicalStateProbe.normalizedState?.stateRevision === canonicalFixtureState.stateRevision
+      && canonicalStateProbe.normalizedState?.activeChangeId === canonicalFixtureState.activeChangeId
+      && canonicalStateProbe.normalizedState?.riskHistoryPath === canonicalFixtureState.riskHistoryPath
+      && canonicalStateProbe.normalizedState?.archivedRiskCount === canonicalFixtureState.archivedRiskCount
+      && JSON.stringify(canonicalStateProbe.normalizedState?.residualRisks) === JSON.stringify(canonicalFixtureState.residualRisks)
+      && canonicalStateProbe.riskHistoryEvents.length === 0,
+    canonicalStateProbe,
+  ),
+  check(
+    'COMP06b',
+    'legacy toolStatus normalizes only when canonical toolStatuses is absent',
+    aliasStateProbe.classification === 'migratable'
+      && aliasStateProbe.normalizedState?.toolStatuses?.lsp === 'verified'
+      && !Object.hasOwn(aliasStateProbe.normalizedState ?? {}, 'toolStatus'),
+    aliasStateProbe,
+  ),
+  check(
+    'COMP06c',
+    'conflicting tool-status aliases block migration',
+    aliasConflictProbe.classification === 'invalid'
+      && aliasConflictProbe.reasonCode === 'CONFLICTING_TOOL_STATUS_ALIASES',
+    aliasConflictProbe,
+  ),
+  check(
+    'COMP06d',
+    'risk history externalization keeps bounded active risks and stable deduplicated events',
+    riskCompactionProbe.classification === 'migratable'
+      && riskCompactionProbe.normalizedState?.residualRisks?.length === 1
+      && riskCompactionProbe.riskHistoryEvents?.length === 2
+      && riskCompactionProbe.normalizedState?.archivedRiskCount === 2
+      && !Object.hasOwn(riskCompactionProbe.normalizedState ?? {}, 'riskArchive'),
+    riskCompactionProbe,
+  ),
+  check(
+    'COMP06e',
+    'executable legacy migration commits canonical state and one batched risk ledger append',
+    executableMigrationProbes.available
+      && executableMigrationProbes.migration.dryRun?.status === 'proceed'
+      && executableMigrationProbes.migration.dryRun?.reasonCode === 'MIGRATION_INSPECTION_READY'
+      && executableMigrationProbes.migration.first?.status === 'complete'
+      && executableMigrationProbes.migration.stateAfterFirst?.stateRevision === 1
+      && executableMigrationProbes.migration.stateAfterFirst?.activeChangeId === null
+      && executableMigrationProbes.migration.stateAfterFirst?.toolStatuses?.lsp === 'verified'
+      && !Object.hasOwn(executableMigrationProbes.migration.stateAfterFirst ?? {}, 'toolStatus')
+      && !Object.hasOwn(executableMigrationProbes.migration.stateAfterFirst ?? {}, 'riskArchive')
+      && executableMigrationProbes.migration.stateAfterFirst?.residualRisks?.length === 6
+      && executableMigrationProbes.migration.ledgerAfterFirst?.length === 3
+      && executableMigrationProbes.migration.riskWrites?.length === 1
+      && executableMigrationProbes.migration.riskWrites?.[0]?.eventIds?.length === 3,
+    executableMigrationProbes.migration,
+  ),
+  check(
+    'COMP06f',
+    'canonical migration rerun is a no-op without revision or ledger duplication',
+    executableMigrationProbes.available
+      && executableMigrationProbes.migration.second?.status === 'complete'
+      && executableMigrationProbes.migration.second?.reasonCode === 'PROJECT_STATE_V1_CANONICAL'
+      && executableMigrationProbes.migration.stateAfterSecond?.stateRevision === 1
+      && executableMigrationProbes.migration.ledgerAfterSecond?.length === 3
+      && executableMigrationProbes.migration.manifestsAfterSecond?.length === executableMigrationProbes.migration.manifestsAfterFirst?.length,
+    executableMigrationProbes.migration,
+  ),
+  check(
+    'COMP06g',
+    'execution rejects source drift against the reviewed dry-run digest set without publishing',
+    executableMigrationProbes.available
+      && executableMigrationProbes.drift.result?.status === 'blocked'
+      && executableMigrationProbes.drift.result?.reasonCode === 'MIGRATION_SOURCE_DIGEST_MISMATCH'
+      && executableMigrationProbes.drift.transactionCount === 0
+      && executableMigrationProbes.drift.stateHasRevision === false,
+    executableMigrationProbes.drift,
+  ),
+  check(
+    'COMP06h',
+    'malformed and duplicate risk ledgers block with precise reason codes',
+    executableMigrationProbes.available
+      && executableMigrationProbes.malformedLedger?.status === 'repair'
+      && executableMigrationProbes.malformedLedger?.reasonCode === 'INVALID_RISK_HISTORY_LEDGER'
+      && executableMigrationProbes.duplicateEventId?.status === 'blocked'
+      && executableMigrationProbes.duplicateEventId?.reasonCode === 'DUPLICATE_RISK_HISTORY_ID'
+      && executableMigrationProbes.duplicateDeduplicationKey?.status === 'blocked'
+      && executableMigrationProbes.duplicateDeduplicationKey?.reasonCode === 'DUPLICATE_RISK_HISTORY_ID',
+    {
+      malformed: executableMigrationProbes.malformedLedger,
+      duplicateEventId: executableMigrationProbes.duplicateEventId,
+      duplicateDeduplicationKey: executableMigrationProbes.duplicateDeduplicationKey,
+    },
   ),
   check(
     'COMP07',
@@ -868,10 +1154,10 @@ const report = {
   summary: { status, passed: checks.length - failed, failed, total: checks.length },
   checks,
   limits: [
-    'This is a read-only fixture audit: every probe runs against a fresh temporary copy and static fixture sources are never mutated.',
+    'Static fixture sources are never mutated; executable probes use disposable temporary copies and remove them in finally blocks.',
     'Byte equality compares the complete sorted relative POSIX file set and each file\'s raw Buffer bytes; digests are retained only as evidence metadata.',
     'Temporary probe directories are always removed in finally blocks.',
-    'The audit proposes compatibility outcomes only; it does not create transactions, locks, recovery state, or derived cache files.',
+    'Executable probes may create transactions, locks, recovery state, derived caches, and risk ledgers only inside disposable temporary copies.',
   ],
 }
 

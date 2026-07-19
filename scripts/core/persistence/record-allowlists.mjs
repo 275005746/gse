@@ -10,8 +10,11 @@ export const PROJECT_STATE_FIELDS = Object.freeze([
   'currentSlice',
   'toolStatuses',
   'lastEvidence',
+  'blockedGates',
+  'nextChecks',
   'residualRisks',
-  'riskArchive',
+  'riskHistoryPath',
+  'archivedRiskCount',
   'activeChangeId',
   'currentSummary',
   'updatedAt',
@@ -46,6 +49,20 @@ export const EVIDENCE_EVENT_FIELDS = Object.freeze([
   'nextAction',
 ])
 
+export const RISK_HISTORY_EVENT_FIELDS = Object.freeze([
+  'schemaVersion',
+  'eventId',
+  'transactionId',
+  'recordType',
+  'riskId',
+  'deduplicationKey',
+  'risk',
+  'sourceRevision',
+  'archivedAt',
+  'resolution',
+  'stateRevision',
+])
+
 const ACTIVE_CHANGE_FIELDS = Object.freeze([
   'schemaVersion',
   'changeId',
@@ -63,6 +80,7 @@ export const ALLOWED_FIELDS_BY_RECORD_TYPE = Object.freeze({
   'project-state': PROJECT_STATE_FIELDS,
   'active-change': ACTIVE_CHANGE_FIELDS,
   'evidence-event': EVIDENCE_EVENT_FIELDS,
+  'risk-history': RISK_HISTORY_EVENT_FIELDS,
   adoption: EVIDENCE_EVENT_FIELDS,
   'change-archive': EVIDENCE_EVENT_FIELDS,
 })

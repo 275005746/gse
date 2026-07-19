@@ -4,8 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { executeTransaction } from './core/persistence/transaction.mjs'
-import { ALLOWED_FIELDS_BY_RECORD_TYPE } from './core/persistence/record-allowlists.mjs'
+import {
+  executeGseV1Migration,
+  inspectGseV1Project,
+} from './core/migration-v1.mjs'
+import {
+  readCompatibleRiskSummary,
+} from './core/project-state-v1.mjs'
 
 const args = process.argv.slice(2)
 
@@ -18,9 +23,8 @@ function readArg(name, fallback = null) {
 const root = path.resolve(readArg('--root', path.join(import.meta.dirname, '..')))
 const targetArg = readArg('--target')
 const jsonOnly = args.includes('--json')
-const write = args.includes('--write') || args.includes('--execute')
+const execute = args.includes('--execute')
 const selfTest = args.includes('--self-test') || !targetArg
-const maxActiveRisks = Number(readArg('--max-active-risks', '6'))
 const maxRiskLength = Number(readArg('--max-risk-length', '260'))
 
 function readText(filePath) {
@@ -53,18 +57,22 @@ function readJsonl(filePath) {
   return { exists: true, ok: true, records, error: '', lines }
 }
 
-function backupFile(filePath) {
-  if (!fs.existsSync(filePath)) return null
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const backupDir = path.join(path.dirname(filePath), 'backups')
-  fs.mkdirSync(backupDir, { recursive: true })
-  const backupPath = path.join(backupDir, `${stamp}-${path.basename(filePath)}.bak`)
-  fs.copyFileSync(filePath, backupPath)
-  return backupPath
-}
+function readRiskHistory(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return { exists: false, ok: true, records: [], error: '' }
+  }
 
-function relative(target, fullPath) {
-  return path.relative(target, fullPath).replace(/\\/g, '/')
+  const text = readText(filePath)
+  if (text && !text.endsWith('\n')) {
+    return {
+      exists: true,
+      ok: false,
+      records: [],
+      error: 'file does not end with a complete JSONL line',
+    }
+  }
+
+  return readJsonl(filePath)
 }
 
 function repairAction(id, severity, targetPath, problem, command, options = {}) {
@@ -79,43 +87,34 @@ function repairAction(id, severity, targetPath, problem, command, options = {}) 
   }
 }
 
-function compactRisks(state, limit) {
-  const residualRisks = Array.isArray(state.residualRisks) ? state.residualRisks : []
-  const keep = residualRisks.slice(0, limit)
-  const overflow = residualRisks.slice(limit)
-  const archive = Array.isArray(state.riskArchive) ? state.riskArchive : []
-  return {
-    ...state,
-    residualRisks: keep,
-    riskArchive: [
-      ...archive,
-      ...overflow.map((risk) => ({
-        archivedAt: new Date().toISOString().slice(0, 10),
-        risk,
-        resolution: 'Archived by GSE state repair to keep active residual risks compact.',
-      })),
-    ],
-  }
-}
-
 function latestEvidenceFileExists(target, latest) {
   return latest?.evidenceFile ? fs.existsSync(path.join(target, latest.evidenceFile)) : false
 }
 
 export async function auditStateRepair(target, options = {}) {
   const resolvedTarget = path.resolve(target)
-  const writeChanges = Boolean(options.write)
-  const riskLimit = Number(options.maxActiveRisks ?? maxActiveRisks)
+  const executeChanges = Boolean(options.execute)
   const riskLengthLimit = Number(options.maxRiskLength ?? maxRiskLength)
   const gseDir = path.join(resolvedTarget, '.gse')
   const statePath = path.join(gseDir, 'state.json')
   const evidenceIndexPath = path.join(gseDir, 'evidence', 'index.jsonl')
+  const riskHistoryPath = path.join(gseDir, 'risk-history.jsonl')
+  const inspection = inspectGseV1Project(resolvedTarget)
+  const migration = executeChanges
+    ? await executeGseV1Migration(resolvedTarget, {
+        sourceDigests: inspection.sourceDigests,
+      })
+    : inspection
   const stateResult = readJson(statePath)
   const evidenceIndex = readJsonl(evidenceIndexPath)
+  const riskHistory = readRiskHistory(riskHistoryPath)
   const state = stateResult.ok ? stateResult.data : null
   const latestEvidence = evidenceIndex.records.at(-1) ?? null
+  const riskSummary = readCompatibleRiskSummary(
+    state,
+    riskHistory.ok && riskHistory.exists ? riskHistory.records.length : null,
+  )
   const actions = []
-  const writes = []
 
   if (!fs.existsSync(gseDir)) {
     actions.push(repairAction(
@@ -134,7 +133,7 @@ export async function auditStateRepair(target, options = {}) {
       '.gse/state.json',
       stateResult.exists ? `Invalid JSON: ${stateResult.error}` : 'Missing state.json.',
       stateResult.exists
-        ? 'Back up .gse/state.json, inspect the JSON error, then run node <gse-skill>/scripts/update-project-state.mjs --target <project-root> --force --json only if rebuilding from project docs is acceptable.'
+        ? 'Repair the reported JSON deliberately; --force does not bypass malformed project state.'
         : 'node <gse-skill>/scripts/update-project-state.mjs --target <project-root> --json',
     ))
   }
@@ -146,61 +145,51 @@ export async function auditStateRepair(target, options = {}) {
       '.gse/evidence/index.jsonl',
       evidenceIndex.exists ? `Invalid JSONL: ${evidenceIndex.error}` : 'Missing evidence index.',
       evidenceIndex.exists
-        ? 'Back up .gse/evidence/index.jsonl, fix the reported line, and rerun /gse continue before implementation.'
+        ? 'Fix the reported JSONL line before relying on continuation or evidence ordering.'
         : 'node <gse-skill>/scripts/update-project-state.mjs --target <project-root> --json',
     ))
   }
 
-  if (state) {
-    const residualRisks = Array.isArray(state.residualRisks) ? state.residualRisks : []
-    const longRisks = residualRisks.filter((risk) => String(risk).length > riskLengthLimit)
-    if (!Array.isArray(state.residualRisks)) {
-      actions.push(repairAction(
-        'SR04',
-        'warning',
-        '.gse/state.json',
-        'residualRisks is missing or is not an array.',
-        'Set residualRisks to an explicit array; use [] only when there are no known residual risks.',
-      ))
-    } else if (residualRisks.length > riskLimit) {
-      actions.push(repairAction(
-        'SR05',
-        'warning',
-        '.gse/state.json',
-        `${residualRisks.length} active residual risks exceed compact limit ${riskLimit}.`,
-        'node <gse-skill>/scripts/run-gse-command.mjs --target <project-root> --command "/gse repair" --execute --json',
-        { writeSupported: true, safeToAutoRepair: true },
-      ))
-      if (writeChanges) {
-        const backupPath = backupFile(statePath)
-        const repairedState = compactRisks(state, riskLimit)
-        const transaction = await executeTransaction({
-          target: resolvedTarget,
-          operationId: `audit-state-repair-${Date.now()}`,
-          expectedRevision: state.stateRevision,
-          writes: [{ kind: 'json-replace', path: '.gse/state.json', value: repairedState }],
-          events: [],
-          allowedFieldsByRecordType: ALLOWED_FIELDS_BY_RECORD_TYPE,
-        })
-        if (transaction.status !== 'complete') throw new Error(transaction.message)
-        writes.push({
-          action: 'compact-residual-risks',
-          targetPath: '.gse/state.json',
-          backupPath: backupPath ? relative(resolvedTarget, backupPath) : null,
-          kept: repairedState.residualRisks.length,
-          archived: residualRisks.length - repairedState.residualRisks.length,
-        })
-      }
-    }
-    if (longRisks.length) {
-      actions.push(repairAction(
-        'SR06',
-        'warning',
-        '.gse/state.json',
-        `${longRisks.length} residual risk(s) exceed ${riskLengthLimit} characters.`,
-        'Shorten active risks to current decision-useful summaries and move detail into riskArchive or the evidence log.',
-      ))
-    }
+  if (
+    migration.reasonCode !== 'PROJECT_STATE_V1_CANONICAL'
+    && !(executeChanges && migration.status === 'complete')
+  ) {
+    actions.push(repairAction(
+      'SR04',
+      migration.status === 'proceed' ? 'warning' : 'hard',
+      '.gse/state.json',
+      migration.reasonCode === 'MIGRATION_INSPECTION_READY'
+        ? 'Project state is safely migratable to the Core v1 contract.'
+        : migration.message,
+      migration.status === 'proceed'
+        ? 'node <gse-skill>/scripts/run-gse-command.mjs --target <project-root> --command "/gse repair" --execute --json'
+        : 'Inspect the migration diagnostics and repair the reported ambiguity or malformed artifact deliberately.',
+      {
+        writeSupported: migration.status === 'proceed',
+        safeToAutoRepair: migration.status === 'proceed',
+      },
+    ))
+  }
+
+  if (!riskHistory.ok) {
+    actions.push(repairAction(
+      'SR05',
+      'hard',
+      '.gse/risk-history.jsonl',
+      `Invalid risk-history JSONL: ${riskHistory.error}`,
+      'Repair the malformed or incomplete risk-history ledger before executing migration.',
+    ))
+  }
+
+  const longRisks = riskSummary.residualRisks.filter((risk) => risk.length > riskLengthLimit)
+  if (longRisks.length > 0) {
+    actions.push(repairAction(
+      'SR06',
+      'warning',
+      '.gse/state.json',
+      `${longRisks.length} active residual risk(s) exceed ${riskLengthLimit} characters.`,
+      'Shorten active risks to current decision-useful summaries; keep historical detail in evidence or .gse/risk-history.jsonl.',
+    ))
   }
 
   if (state && evidenceIndex.ok && evidenceIndex.records.length > 0) {
@@ -210,7 +199,7 @@ export async function auditStateRepair(target, options = {}) {
         'warning',
         '.gse/state.json',
         `lastEvidence points to ${state.lastEvidence}, but latest evidence index record points to ${latestEvidence.evidenceFile}.`,
-        'Update lastEvidence to the latest evidence file after confirming the newest record belongs to the current project state.',
+        'Confirm which artifact is newer and update only the stale side; repair does not guess evidence precedence.',
       ))
     }
     if (latestEvidence?.evidenceFile && !latestEvidenceFileExists(resolvedTarget, latestEvidence)) {
@@ -219,45 +208,65 @@ export async function auditStateRepair(target, options = {}) {
         'hard',
         '.gse/evidence/index.jsonl',
         `Latest evidence file is missing: ${latestEvidence.evidenceFile}.`,
-        'Restore the referenced evidence file or append a new evidence record that points to an existing file.',
+        'Restore the referenced evidence file or append a valid replacement evidence record.',
       ))
     }
     if (
-      state.currentSlice?.nextAction &&
-      latestEvidence?.nextAction &&
-      state.currentSlice.nextAction !== latestEvidence.nextAction
+      state.currentSlice?.nextAction
+      && latestEvidence?.nextAction
+      && state.currentSlice.nextAction !== latestEvidence.nextAction
     ) {
       actions.push(repairAction(
         'SR09',
         'warning',
         '.gse/state.json',
         'currentSlice.nextAction differs from the latest evidence nextAction.',
-        'Confirm whether state or evidence is newer; update only the stale side before selecting an implementation slice.',
+        'Confirm whether state or evidence is newer; repair does not reconcile next-action drift automatically.',
       ))
     }
   }
 
   const hardActions = actions.filter((item) => item.severity === 'hard')
   const warningActions = actions.filter((item) => item.severity === 'warning')
+  const proposedWritePaths = Array.isArray(inspection.proposedWrites)
+    ? [...new Set(inspection.proposedWrites.map((write) => write.path))]
+    : []
+  const artifactRefs = executeChanges && migration.status === 'complete'
+    ? proposedWritePaths
+    : []
+
   return {
     root,
     target: resolvedTarget,
     generatedAt: new Date().toISOString(),
-    write: writeChanges,
+    execute: executeChanges,
     summary: {
       status: hardActions.length ? 'repair-required' : warningActions.length ? 'repair-advised' : 'clean',
       hard: hardActions.length,
       warnings: warningActions.length,
       actions: actions.length,
-      writes: writes.length,
+      writes: artifactRefs.length,
+    },
+    compatibility: {
+      status: migration.status,
+      reasonCode: migration.reasonCode,
+      stateRevision: migration.stateRevision,
+      proposedWrites: Array.isArray(migration.proposedWrites) ? migration.proposedWrites : [],
+      sourceDigests: migration.sourceDigests ?? {},
+      migrationSummary: migration.migrationSummary ?? null,
+      diagnostics: migration.diagnostics ?? [],
     },
     state: {
       exists: stateResult.exists,
       valid: stateResult.ok,
+      stateRevision: state?.stateRevision ?? null,
+      activeChangeId: state?.activeChangeId ?? null,
       currentSliceId: state?.currentSlice?.id ?? null,
       nextAction: state?.currentSlice?.nextAction ?? null,
-      residualRisks: Array.isArray(state?.residualRisks) ? state.residualRisks.length : null,
-      riskArchive: Array.isArray(state?.riskArchive) ? state.riskArchive.length : null,
+      residualRisks: riskSummary.residualRisks.length,
+      archivedRiskCount: riskSummary.archivedRiskCount,
+      riskHistoryPath: riskSummary.riskHistoryPath,
+      embeddedRiskArchive: Array.isArray(state?.riskArchive) ? state.riskArchive.length : 0,
     },
     evidenceIndex: {
       exists: evidenceIndex.exists,
@@ -266,25 +275,32 @@ export async function auditStateRepair(target, options = {}) {
       latestEvidenceFile: latestEvidence?.evidenceFile ?? null,
       latestNextAction: latestEvidence?.nextAction ?? null,
     },
+    riskHistory: {
+      exists: riskHistory.exists,
+      valid: riskHistory.ok,
+      records: riskHistory.records.length,
+      path: riskSummary.riskHistoryPath,
+    },
+    migration,
     repairActions: actions,
-    writes,
+    writes: artifactRefs.map((targetPath) => ({
+      action: 'core-v1-migration',
+      targetPath,
+    })),
     limits: [
-      'Default mode is diagnostic; it does not modify project files.',
-      'Automatic writes are limited to reversible residual-risk compaction with a backup.',
-      'Invalid JSON/JSONL is not guessed or overwritten; repair the reported file or rebuild state from project docs deliberately.',
+      'Default mode is diagnostic and does not modify project files.',
+      'Explicit --execute uses the shared Core v1 migration transaction; it does not create a separate backup directory.',
+      'Historical risks are externalized to .gse/risk-history.jsonl and are not loaded into compact continuation output.',
+      'Evidence and next-action drift remain warnings and are never reconciled automatically.',
     ],
   }
 }
 
-function createFixture(kind) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `gse-state-repair-${kind}-`))
-  fs.mkdirSync(path.join(dir, '.gse', 'evidence'), { recursive: true })
-  fs.writeFileSync(path.join(dir, '.gse', 'README.md'), '# GSE\n', 'utf8')
+function fixtureState(kind) {
   const state = {
     schemaVersion: 1,
     projectName: 'repair-fixture',
     mode: 'standard',
-    canonicalPlan: '',
     phase: 'execute',
     currentSlice: {
       id: 'repair-fixture',
@@ -292,14 +308,41 @@ function createFixture(kind) {
       status: 'verified',
       nextAction: kind === 'stale' ? 'Stale state action.' : 'Run next repair fixture.',
     },
+    toolStatuses: { browser: 'unknown' },
     lastEvidence: '.gse/evidence/2026-07-08.md',
-    residualRisks: kind === 'overlong'
-      ? Array.from({ length: 9 }, (_, index) => `Fixture risk ${index + 1}.`)
-      : ['Fixture risk.'],
-    riskArchive: [],
+    residualRisks: ['Fixture risk.'],
   }
-  if (kind === 'bad-state') fs.writeFileSync(path.join(dir, '.gse', 'state.json'), '{ bad json\n', 'utf8')
-  else fs.writeFileSync(path.join(dir, '.gse', 'state.json'), JSON.stringify(state, null, 2) + '\n', 'utf8')
+
+  if (['canonical', 'stale', 'bad-jsonl'].includes(kind)) {
+    return { ...state, stateRevision: 0, activeChangeId: null }
+  }
+
+  const { toolStatuses, ...legacyState } = state
+  return {
+    ...legacyState,
+    toolStatus: toolStatuses,
+    residualRisks: Array.from({ length: 8 }, (_, index) => `Fixture risk ${index + 1}.`),
+    riskArchive: [{
+      archivedAt: '2026-07-01T00:00:00.000Z',
+      risk: 'Previously archived fixture risk.',
+      resolution: 'Fixture archive.',
+    }],
+  }
+}
+
+function createFixture(kind) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `gse-state-repair-${kind}-`))
+  fs.mkdirSync(path.join(dir, '.gse', 'evidence'), { recursive: true })
+  fs.writeFileSync(path.join(dir, '.gse', 'README.md'), '# GSE\n', 'utf8')
+
+  fs.writeFileSync(
+    path.join(dir, '.gse', 'state.json'),
+    kind === 'bad-state'
+      ? '{ bad json\n'
+      : JSON.stringify(fixtureState(kind), null, 2) + '\n',
+    'utf8',
+  )
+
   const record = {
     date: '2026-07-08',
     recordType: 'slice',
@@ -321,35 +364,90 @@ function createFixture(kind) {
 }
 
 async function runSelfTest() {
-  const clean = createFixture('clean')
+  const canonical = createFixture('canonical')
+  const legacy = createFixture('legacy')
+  const executeFixture = createFixture('legacy')
   const badState = createFixture('bad-state')
   const badJsonl = createFixture('bad-jsonl')
-  const overlong = createFixture('overlong')
   const stale = createFixture('stale')
-  const writeFixture = createFixture('overlong')
   const reports = {
-    clean: await auditStateRepair(clean),
+    canonical: await auditStateRepair(canonical),
+    legacy: await auditStateRepair(legacy),
+    execute: await auditStateRepair(executeFixture, { execute: true }),
     badState: await auditStateRepair(badState),
     badJsonl: await auditStateRepair(badJsonl),
-    overlong: await auditStateRepair(overlong),
     stale: await auditStateRepair(stale),
-    write: await auditStateRepair(writeFixture, { write: true }),
   }
+  reports.rerun = await auditStateRepair(executeFixture)
+
+  const migratedState = readJson(path.join(executeFixture, '.gse', 'state.json')).data
+  const migratedHistory = readRiskHistory(path.join(executeFixture, '.gse', 'risk-history.jsonl'))
   const checks = [
-    { id: 'SR-T01', status: reports.clean.summary.status === 'clean' ? 'passed' : 'failed', evidence: reports.clean.summary.status },
-    { id: 'SR-T02', status: reports.badState.repairActions.some((item) => item.id === 'SR02' && item.severity === 'hard') ? 'passed' : 'failed', evidence: 'bad state fixture' },
-    { id: 'SR-T03', status: reports.badJsonl.repairActions.some((item) => item.id === 'SR03' && item.severity === 'hard') ? 'passed' : 'failed', evidence: 'bad JSONL fixture' },
-    { id: 'SR-T04', status: reports.overlong.repairActions.some((item) => item.id === 'SR05' && item.safeToAutoRepair) ? 'passed' : 'failed', evidence: 'overlong risk fixture' },
-    { id: 'SR-T05', status: reports.stale.repairActions.some((item) => item.id === 'SR09') ? 'passed' : 'failed', evidence: 'stale nextAction fixture' },
+    {
+      id: 'SR-T01',
+      status: reports.canonical.summary.status === 'clean'
+        && reports.canonical.compatibility.reasonCode === 'PROJECT_STATE_V1_CANONICAL'
+        ? 'passed' : 'failed',
+      evidence: reports.canonical.compatibility.reasonCode,
+    },
+    {
+      id: 'SR-T02',
+      status: reports.legacy.compatibility.reasonCode === 'MIGRATION_INSPECTION_READY'
+        && reports.legacy.summary.writes === 0
+        && !fs.existsSync(path.join(legacy, '.gse', 'risk-history.jsonl'))
+        ? 'passed' : 'failed',
+      evidence: 'legacy inspection is read-only',
+    },
+    {
+      id: 'SR-T03',
+      status: reports.execute.migration.status === 'complete'
+        && migratedState?.stateRevision === 1
+        && migratedState?.activeChangeId === null
+        && !Object.hasOwn(migratedState ?? {}, 'riskArchive')
+        && migratedHistory.ok
+        && migratedHistory.records.length === 3
+        ? 'passed' : 'failed',
+      evidence: 'execution externalizes three historical risks',
+    },
+    {
+      id: 'SR-T04',
+      status: reports.rerun.compatibility.reasonCode === 'PROJECT_STATE_V1_CANONICAL'
+        && reports.rerun.summary.writes === 0
+        && migratedHistory.records.length === 3
+        ? 'passed' : 'failed',
+      evidence: 'canonical rerun is idempotent',
+    },
+    {
+      id: 'SR-T05',
+      status: reports.badState.repairActions.some((item) => item.id === 'SR02' && item.severity === 'hard')
+        ? 'passed' : 'failed',
+      evidence: 'malformed state fails closed',
+    },
     {
       id: 'SR-T06',
-      status: reports.write.writes.some((item) => item.action === 'compact-residual-risks' && String(item.backupPath).startsWith('.gse/backups/')) && reports.write.state.residualRisks === 9 ? 'passed' : 'failed',
-      evidence: 'write report keeps pre-write count and records .gse backup',
+      status: reports.badJsonl.repairActions.some((item) => item.id === 'SR03' && item.severity === 'hard')
+        ? 'passed' : 'failed',
+      evidence: 'malformed evidence index is diagnosed',
+    },
+    {
+      id: 'SR-T07',
+      status: reports.stale.repairActions.some((item) => item.id === 'SR09' && item.severity === 'warning')
+        ? 'passed' : 'failed',
+      evidence: 'next-action drift remains warning-only',
+    },
+    {
+      id: 'SR-T08',
+      status: !fs.existsSync(path.join(executeFixture, '.gse', 'backups')) ? 'passed' : 'failed',
+      evidence: 'migration creates no independent backup directory',
     },
   ]
   const passed = checks.filter((item) => item.status === 'passed').length
   const failed = checks.length - passed
-  for (const dir of [clean, badState, badJsonl, overlong, stale, writeFixture]) fs.rmSync(dir, { recursive: true, force: true })
+
+  for (const dir of [canonical, legacy, executeFixture, badState, badJsonl, stale]) {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+
   return {
     root,
     generatedAt: new Date().toISOString(),
@@ -362,7 +460,7 @@ async function runSelfTest() {
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 
 if (isCli) {
-  const report = selfTest ? await runSelfTest() : await auditStateRepair(targetArg, { write })
+  const report = selfTest ? await runSelfTest() : await auditStateRepair(targetArg, { execute })
 
   if (jsonOnly) console.log(JSON.stringify(report, null, 2))
   else console.log(JSON.stringify(report, null, 2))
