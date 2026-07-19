@@ -849,21 +849,22 @@ Keep derived predicates after all source values are initialized, and compare rep
 **Area**: infra
 
 ### Summary
-The release commit lacked a configured author identity, and the follow-up error-log read reused an invalid offset pattern.
+The release commit and annotated Tag lacked a configured author/committer identity, and the follow-up error-log read reused an invalid offset pattern.
 
 ### Error
 ```text
 Author identity unknown
+Committer identity unknown
 fatal: unable to auto-detect email address
 Warning: the file exists but is shorter than the provided offset. The file has 843 lines.
 ```
 
 ### Context
-- The repository and global Git configuration did not provide `user.name` or `user.email`.
+- The repository and global Git configuration did not provide `user.name` or `user.email` for commits or annotated Tags.
 - The first log read used an out-of-range offset instead of the known file length.
 
 ### Suggested Fix
-Inspect the latest commit author and pass that established identity only to the approved commit process without changing Git configuration. Use a valid tail range after an out-of-range read.
+Inspect the latest commit author and pass that established identity only to the approved commit or annotated-Tag process without changing Git configuration. Use a valid tail range after an out-of-range read.
 
 ### Metadata
 - Reproducible: yes
