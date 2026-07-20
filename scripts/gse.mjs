@@ -24,6 +24,7 @@ function stripRunnerArgs(values) {
       index += 1
       continue
     }
+    if (item === '--force') continue
     stripped.push(item)
   }
   return stripped
@@ -34,7 +35,7 @@ function commandFromArgs(values) {
   if (explicit) return explicit
 
   const commandParts = stripRunnerArgs(values)
-    .filter((item) => item !== '--json' && item !== '--execute')
+    .filter((item) => item !== '--json' && item !== '--execute' && item !== '--compact')
 
   if (commandParts.length === 0 || commandParts[0] === 'help' || commandParts[0] === '--help' || commandParts[0] === '-h') {
     return '/gse help'
@@ -57,6 +58,8 @@ const runnerArgs = [
 
 if (args.includes('--json')) runnerArgs.push('--json')
 if (args.includes('--execute')) runnerArgs.push('--execute')
+if (args.includes('--compact')) runnerArgs.push('--compact')
+if (args.includes('--force')) runnerArgs.push('--force')
 
 const result = spawnSync(process.execPath, runnerArgs, {
   cwd: root,

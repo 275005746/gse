@@ -1,5 +1,28 @@
 # GSE Learnings
 
+## [LRN-20260718-001] cross-repository-validation
+
+**Logged**: 2026-07-18T00:00:00Z
+**Priority**: medium
+**Status**: pending
+**Area**: infra
+
+### Summary
+Cross-repository validation commands must use the target repository path explicitly.
+
+### Details
+The active shell checkout was `gse-lang-fix`, while the implementation target was `gse-recreate-clean-core-foundation`. Running relative Node script paths therefore reported a missing `scripts/task-admission.mjs` even though the target file existed. Re-running with target absolute paths produced the expected audit result.
+
+### Suggested Action
+When working across checkouts, invoke scripts with the target repository absolute path or an explicit command prefix and inspect the target root before validation.
+
+### Metadata
+- Source: error
+- Related Files: scripts/task-admission.mjs
+- Tags: validation, multi-repository
+
+---
+
 ## [LRN-20260707-001] best_practice
 
 **Logged**: 2026-07-07T06:53:48+08:00
@@ -116,5 +139,32 @@ When the user limits task or subagent counts, treat that limit as a total execut
 ### Resolution
 - **Resolved**: 2026-07-17T11:05:00Z
 - **Notes**: Stopped the fan-out review path and switched the remaining review to a single inline execution stream without Agents, workflows, or task creation.
+
+---
+
+## [LRN-20260719-003] correction
+
+**Logged**: 2026-07-19T00:00:00Z
+**Priority**: high
+**Status**: pending
+**Area**: backend
+
+### Summary
+Cross-project state-format defects must be fixed in the GSE skill lifecycle, not framed as a target-project migration feature.
+
+### Details
+Hermes exposed missing Core v1 transaction fields, duplicate tool-status naming, and embedded risk-history bloat, but those are symptoms of GSE initialization, adoption update, migration execution, doctor, and repair gaps. Treating the work as an independent Hermes GSE migration would duplicate policy in the target and leave every other adopted project vulnerable.
+
+### Suggested Action
+Trace and repair the generic GSE skill first. Use Hermes only as a real legacy-target fixture and end-to-end acceptance target; add target-local code only when a consumer compatibility test proves it necessary.
+
+### Metadata
+- Source: user_feedback
+- Related Files: scripts/init-project.mjs, scripts/update-project-state.mjs, scripts/core/migration-v1.mjs, scripts/audit-state-repair.mjs
+- Tags: gse, migration, ownership, compatibility
+- Pattern-Key: architecture.fix_framework_not_target_symptom
+- Recurrence-Count: 1
+- First-Seen: 2026-07-19
+- Last-Seen: 2026-07-19
 
 ---

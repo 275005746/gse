@@ -44,23 +44,33 @@ Steps:
 node <gse-skill>/scripts/discover-project-profile.mjs --target <project-root> --json
 ```
 
-3. Run document triage before writing anything:
+3. Preview through the public command without writing:
+
+```text
+node <gse-skill>/scripts/gse.mjs adopt --target <project-root> --mode <mode> --json
+```
+
+The preview runs the target audit, reports missing and preserved GSE artifacts, and identifies existing project files that will remain untouched.
+
+4. Run document triage before writing anything:
 
 - identify the canonical product goal source or confirm that it is missing;
 - keep project roadmap/architecture/PRD/vision/product-plan docs untouched;
 - keep `.gse/goal-map.md` short and projection-only;
 - route long history to `.gse/evidence/` and reusable lessons to `.gse/learnings.md` or `.learnings/`.
 
-4. Treat discovered scripts/configs as `documented`, not `verified`, until the commands actually run.
-5. If `.gse/project-profile.md` already exists, do not overwrite it without explicit `--force` and a reason. Do not overwrite existing project workflow files just because GSE has defaults.
-6. If writing is approved, use:
+5. Treat discovered scripts/configs as `documented`, not `verified`, until the commands actually run.
+6. If `.gse/project-profile.md` already exists, do not overwrite it without explicit `--force` and a reason. Do not overwrite existing project workflow files just because GSE has defaults.
+7. If writing is approved, run the public adoption command:
 
 ```text
-node <gse-skill>/scripts/discover-project-profile.mjs --target <project-root> --write
+node <gse-skill>/scripts/gse.mjs adopt --target <project-root> --mode <mode> --execute --json
 ```
 
-7. Preserve project-specific standards, host adapters, existing evidence logs, and owner decisions.
-8. Record whether adoption is `result`, `verified`, or `accepted` using `references/evidence-taxonomy.md`.
+Use `--force` only as a separate, explicit overwrite authorization. `--execute` alone creates missing artifacts and preserves existing project rules and `.gse/` content.
+
+8. Preserve project-specific standards, host adapters, existing evidence logs, and owner decisions.
+9. Record whether adoption is `result`, `verified`, or `accepted` using `references/evidence-taxonomy.md`.
 
 Evidence status: `verified` for controlled fixture behavior when `scripts/audit-adoption.mjs` passes; real repos need project-specific evidence.
 

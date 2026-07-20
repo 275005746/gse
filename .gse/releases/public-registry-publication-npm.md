@@ -1,49 +1,49 @@
-# Public Registry Publication Record
+# Public Channel Publication Record
 
-Publication status: not-claimed
+Publication status: accepted
 
 Channel type: package-registry
 
 Channel name: npm
 
-Channel URL:
+Channel URL: https://www.npmjs.com/package/@t275005746/gse/v/1.2.0
 
-Package or listing version: 1.0.0
+Package or listing version: 1.2.0
 
-Artifact digest:
+Artifact digest: sha512-kU56i8PFdNDfMVH76UQ2EdIV80WhuW8Ax14NhV7XWHc65qK514Dlsa03PjpwnodEH+YhWukAdaVBKRXWff8ilg==
 
-Review or approval status: not recorded
+Review or approval status: published
 
 Evidence owner: 275005746
 
-Evidence date: 2026-07-16
+Evidence date: 2026-07-19
 
-Evidence URL or run id:
+Evidence URL or run id: https://registry.npmjs.org/@t275005746/gse/-/gse-1.2.0.tgz
 
 ## Verification
 
-Verification command: cmd /c npm view @t275005746/gse@1.0.0 --json
+Verification command: npm view @t275005746/gse@1.2.0 version dist --json
 
-Verification result: pending unless the owner publishes the 1.0.0 package to npm
+Verification result: Registry version, shasum, integrity, tarball URL, latest tag, and clean consumer install verified; install audit passed 11/11.
 
 ## Acceptance
 
-Evidence status: not-claimed
+Evidence status: accepted
 
-Accepted by:
+Accepted by: npm-registry
 
-Accepted at:
+Accepted at: 2026-07-18T17:13:35.704Z
 
 ## Boundaries
 
-- Does this prove public registry publication? false
+- Does this prove public registry publication? true
 - Does this prove marketplace approval? false
-- Does this prove installability from the channel? false
+- Does this prove installability from the channel? true
 
 ## Residual Risk
 
-- GitHub source release and npm registry publication are separate channels.
+- Marketplace approval remains pending; npm publication does not prove catalog acceptance.
 
 ## Next Action
 
-- Publish and verify `@t275005746/gse@1.0.0` only if npm distribution is required.
+- Submit the verified 1.2.0 listing to a named marketplace and attach the external approval response.

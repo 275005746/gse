@@ -1,26 +1,20 @@
 # GSE Final-Form Progress Report
 
-Generated: 2026-07-17T14:08:15.981Z
+Generated: 2026-07-18T19:15:55.893Z
 Root: <gse-root>
 
 ## Summary
 
 - Status: release-evidence-pending
 - Local engineering readiness: 100%
-- Full final-form readiness: 83%
+- Full final-form readiness: 88%
 - Scoring basis: local engineering excludes owner-required and external-required rows; full final-form counts every readiness row
 - Public accepted: not-accepted
-- Matrix rows: 20 verified, 0 owner-required, 3 external-required, 1 not-claimed, 24 total
-- Local rows: 20
+- Matrix rows: 21 verified, 0 owner-required, 2 external-required, 1 not-claimed, 24 total
+- Local rows: 21
 
 ## Pending Release Evidence
 
-- Public registry publication: external-required
-  - Owner: external registry
-  - Evidence now: no public registry publication record is claimed
-  - Required evidence: Real registry package URL, version, digest, publication date, verification command, and accepted evidence.
-  - Preflight command: `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json`
-  - Record command: `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force`
 - Marketplace approval: external-required
   - Owner: external marketplace
   - Evidence now: references/marketplace-discovery.md
@@ -39,7 +33,7 @@ Root: <gse-root>
 - Skill structure: verified (SKILL.md, scripts/validate-gse.mjs)
 - Project scaffold: verified (init/project doctor/close gate scripts)
 - Local install: verified (scripts/audit-distribution.mjs verifies package/install, installed validation, entrypoints.cli, and installed gse.mjs status)
-- npm tarball install: verified (scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed bin execution, and installed README audit)
+- npm tarball install: verified (scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed help/init/status execution, and installed README audit)
 - npm publish dry-run: verified (scripts/audit-npm-publish-dry-run.mjs verifies publish dry-run metadata, CLI bin preservation, required files, and integrity fields)
 - URL install: verified (scripts/audit-remote-distribution.mjs verifies URL install, installed validation, installed gse.mjs status, and tamper rejection)
 - Signing: verified (sign/verify/audit scripts)
@@ -54,6 +48,7 @@ Root: <gse-root>
 - Public security contact record: verified (record/audit public security contact scripts and template)
 - Public security contact: verified (.gse/releases/public-security-contact-owner-required.md)
 - Public channel publication record: verified (record/audit public channel publication scripts and template)
+- Public registry publication: verified (.gse/releases/public-registry-publication-npm.md)
 - Portable command execution: verified (run-gse-command and audit-command-execution)
 - Host adapters: verified (command adapter generator and audit)
 

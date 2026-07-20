@@ -107,6 +107,10 @@ function jsonlBytes(record) {
   return Buffer.from(`${serialized}\n`, 'utf8')
 }
 
+function jsonlBatchBytes(records) {
+  return Buffer.concat(records.map(jsonlBytes))
+}
+
 function readFileOrEmpty(filePath) {
   try {
     return fs.readFileSync(filePath)
@@ -364,10 +368,11 @@ function normalizeRequestedWrites(options) {
 
 function sanitizeRequestedWrites(options, transactionId, expectedRevision) {
   const requestedWrites = normalizeRequestedWrites(options)
-  const seenPaths = new Set()
+  const pathKinds = new Map()
   const seenEventIds = new Set()
+  const sanitizedWrites = []
 
-  return requestedWrites.map((write, index) => {
+  for (const [index, write] of requestedWrites.entries()) {
     if (!write || typeof write !== 'object' || Array.isArray(write)) {
       const error = new Error('Each transaction write must be an object.')
       error.code = 'INVALID_TRANSACTION_WRITE'
@@ -380,12 +385,13 @@ function sanitizeRequestedWrites(options, transactionId, expectedRevision) {
     }
     const relativePath = toPosix(write.path ?? write.targetPath ?? write.sourcePath)
     resolveInside(options.target, relativePath)
-    if (seenPaths.has(relativePath)) {
+    const existingKind = pathKinds.get(relativePath)
+    if (existingKind !== undefined && (existingKind !== 'jsonl-append' || write.kind !== 'jsonl-append')) {
       const error = new Error('A transaction cannot write the same canonical path more than once.')
       error.code = 'DUPLICATE_WRITE_PATH'
       throw error
     }
-    seenPaths.add(relativePath)
+    pathKinds.set(relativePath, write.kind)
 
     if (write.kind === 'text-write') {
       if (typeof write.content !== 'string') {
@@ -393,31 +399,34 @@ function sanitizeRequestedWrites(options, transactionId, expectedRevision) {
         error.code = 'INVALID_TEXT_WRITE'
         throw error
       }
-      return { index, kind: write.kind, path: relativePath, content: write.content }
+      sanitizedWrites.push({ index, kind: write.kind, path: relativePath, content: write.content })
+      continue
     }
 
     if (write.kind === 'tree-move') {
-      seenPaths.delete(relativePath)
+      pathKinds.delete(relativePath)
       const sourcePath = toPosix(write.sourcePath)
       const targetPath = toPosix(write.targetPath)
       resolveInside(options.target, sourcePath)
       resolveInside(options.target, targetPath)
-      if (seenPaths.has(sourcePath) || seenPaths.has(targetPath) || sourcePath === targetPath) {
+      if (pathKinds.has(sourcePath) || pathKinds.has(targetPath) || sourcePath === targetPath) {
         const error = new Error('Tree move paths must be unique and distinct.')
         error.code = 'DUPLICATE_WRITE_PATH'
         throw error
       }
-      seenPaths.add(sourcePath)
-      return { index, kind: write.kind, path: targetPath, sourcePath, targetPath }
+      pathKinds.set(sourcePath, write.kind)
+      pathKinds.set(targetPath, write.kind)
+      sanitizedWrites.push({ index, kind: write.kind, path: targetPath, sourcePath, targetPath })
+      continue
     }
 
     if (write.kind === 'json-replace') {
       const value = sanitizeRecord(write.value, relativePath, options.allowedFieldsByRecordType)
-      return { index, kind: write.kind, path: relativePath, value }
+      sanitizedWrites.push({ index, kind: write.kind, path: relativePath, value })
+      continue
     }
 
-    const inputEvent = write.event
-    const sanitizedEvent = sanitizeRecord(inputEvent, relativePath, options.allowedFieldsByRecordType)
+    const sanitizedEvent = sanitizeRecord(write.event, relativePath, options.allowedFieldsByRecordType)
     const eventId = sanitizedEvent.eventId
     if (typeof eventId !== 'string' || eventId.length === 0 || seenEventIds.has(eventId)) {
       const error = new Error('Each JSONL append requires a unique eventId.')
@@ -425,14 +434,41 @@ function sanitizeRequestedWrites(options, transactionId, expectedRevision) {
       throw error
     }
     seenEventIds.add(eventId)
-    return {
+    sanitizedWrites.push({
       index,
       kind: write.kind,
       path: relativePath,
       eventId,
       event: { ...sanitizedEvent, transactionId, stateRevision: expectedRevision + 1 },
+    })
+  }
+
+  const grouped = []
+  const jsonlByPath = new Map()
+  for (const write of sanitizedWrites) {
+    if (write.kind !== 'jsonl-append') {
+      grouped.push(write)
+      continue
     }
-  })
+    const existing = jsonlByPath.get(write.path)
+    if (existing) {
+      existing.eventIds.push(write.eventId)
+      existing.events.push(write.event)
+      continue
+    }
+    const batch = {
+      index: write.index,
+      kind: write.kind,
+      path: write.path,
+      eventId: write.eventId,
+      eventIds: [write.eventId],
+      event: write.event,
+      events: [write.event],
+    }
+    jsonlByPath.set(write.path, batch)
+    grouped.push(batch)
+  }
+  return grouped.sort((left, right) => left.index - right.index)
 }
 
 function prepareWrite(target, transactionId, expectedRevision, write) {
@@ -481,9 +517,16 @@ function prepareWrite(target, transactionId, expectedRevision, write) {
   }
 
   const committed = readCommittedJsonl(target, write.path, { allowMissing: true })
-  const duplicate = committed.records.some((record) => record?.eventId === write.eventId)
-  const appendBytes = jsonlBytes(write.event)
-  const afterBytes = duplicate ? beforeBytes : Buffer.concat([beforeBytes, appendBytes])
+  if (committed.corruptTail.length > 0) {
+    const error = new Error('A JSONL destination has a malformed or incomplete tail.')
+    error.code = 'INVALID_JSONL_TAIL'
+    throw error
+  }
+  const committedIds = new Set(committed.records.map((record) => record?.eventId).filter((eventId) => typeof eventId === 'string'))
+  const appendEvents = write.events.filter((event) => !committedIds.has(event.eventId))
+  const appendBytes = jsonlBatchBytes(appendEvents)
+  const afterBytes = appendEvents.length === 0 ? beforeBytes : Buffer.concat([beforeBytes, appendBytes])
+  const eventIds = write.events.map((event) => event.eventId)
   return {
     ...write,
     stagedPath,
@@ -492,7 +535,9 @@ function prepareWrite(target, transactionId, expectedRevision, write) {
     beforeDigest,
     beforeSize: beforeBytes.length,
     afterDigest: digestBytes(afterBytes),
-    duplicate,
+    duplicate: appendEvents.length === 0,
+    appendEvents,
+    eventIds,
     published: false,
     manifestWrite: {
       kind: write.kind,
@@ -501,7 +546,8 @@ function prepareWrite(target, transactionId, expectedRevision, write) {
       afterDigest: digestBytes(afterBytes),
       stagedPath,
       beforeImagePath,
-      eventId: write.eventId,
+      ...(eventIds.length === 1 ? { eventId: eventIds[0] } : {}),
+      eventIds,
       beforeSize: beforeBytes.length,
     },
   }
@@ -539,7 +585,10 @@ function stageWrites(target, preparedWrites) {
     if (write.kind === 'json-replace') {
       stageAtomicJson(target, write.stagedPath, write.value)
     } else if (write.kind === 'jsonl-append') {
-      stageJsonlAppend(target, write.stagedPath, write.event)
+      const stagedBytes = jsonlBatchBytes(write.appendEvents)
+      const destination = resolveInside(target, write.stagedPath)
+      fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })
+      fs.writeFileSync(destination, stagedBytes)
     } else if (write.kind === 'text-write') {
       const destination = resolveInside(target, write.stagedPath)
       fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 })
@@ -614,7 +663,7 @@ export async function executeTransaction(options = {}) {
   try {
     replay = findCommittedReplay(options.target, operationId, sanitizedWrites
       .filter((write) => write.kind === 'jsonl-append')
-      .map((write) => write.eventId))
+      .flatMap((write) => write.eventIds))
       ?? existingCommittedResult(options.target, operationId, transactionId)
   } catch {
     return failure(operationId, transactionId, 'INVALID_TARGET', 'The project target is unavailable or unsafe.')
@@ -645,11 +694,21 @@ export async function executeTransaction(options = {}) {
 
     const state = readAtomicJson(options.target, '.gse/state.json')
     const actualRevision = state?.stateRevision
-    if (!Number.isInteger(actualRevision) || actualRevision < 0) {
+    const migrationBootstrap = options.migrationBootstrap
+    const bootstrapRequested = migrationBootstrap !== null
+      && typeof migrationBootstrap === 'object'
+      && !Array.isArray(migrationBootstrap)
+    const bootstrapDigest = bootstrapRequested ? migrationBootstrap.stateDigest : null
+    const bootstrapAllowed = bootstrapRequested
+      && expectedRevision === 0
+      && typeof bootstrapDigest === 'string'
+      && digestFile(resolveInside(options.target, '.gse/state.json')) === bootstrapDigest
+      && (!Object.hasOwn(state, 'stateRevision') || state.stateRevision === undefined)
+    if ((!Number.isInteger(actualRevision) || actualRevision < 0) && !bootstrapAllowed) {
       releaseProjectLock(lock)
       return failure(operationId, transactionId, 'INVALID_PROJECT_STATE', 'Project state does not contain a valid stateRevision.')
     }
-    if (actualRevision !== expectedRevision) {
+    if (!bootstrapAllowed && actualRevision !== expectedRevision) {
       releaseProjectLock(lock)
       return failure(operationId, transactionId, 'STATE_REVISION_MISMATCH', 'Project state changed after this transaction was prepared.', {
         stateRevision: actualRevision,
@@ -680,7 +739,9 @@ export async function executeTransaction(options = {}) {
       nextRevision: expectedRevision + 1,
       status: 'prepared',
       writes: preparedWrites.map((write) => write.manifestWrite),
-      eventIds: preparedWrites.filter((write) => write.kind === 'jsonl-append').map((write) => write.eventId),
+      eventIds: preparedWrites
+        .filter((write) => write.kind === 'jsonl-append')
+        .flatMap((write) => write.eventIds),
     }
     assertTransactionManifestContract(manifest)
     writeAtomicJson(options.target, manifestPath, manifest)

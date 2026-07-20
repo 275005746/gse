@@ -1,6 +1,6 @@
 # GSE Final Acceptance Packet
 
-Generated: 2026-07-17T14:08:14.903Z
+Generated: 2026-07-18T19:15:56.443Z
 Root: <gse-root>
 
 ## Purpose
@@ -11,8 +11,8 @@ Turn the final-readiness matrix into an executable owner/external acceptance che
 
 - Local readiness: verified
 - Public accepted: not-accepted
-- Verified rows: 20
-- Pending owner/external rows: 3
+- Verified rows: 21
+- Pending owner/external rows: 2
 - Optional not-claimed rows: 1
 
 ## Verified Local Capabilities
@@ -20,7 +20,7 @@ Turn the final-readiness matrix into an executable owner/external acceptance che
 - Skill structure: verified; evidence: SKILL.md, scripts/validate-gse.mjs
 - Project scaffold: verified; evidence: init/project doctor/close gate scripts
 - Local install: verified; evidence: scripts/audit-distribution.mjs verifies package/install, installed validation, entrypoints.cli, and installed gse.mjs status
-- npm tarball install: verified; evidence: scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed bin execution, and installed README audit
+- npm tarball install: verified; evidence: scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed help/init/status execution, and installed README audit
 - npm publish dry-run: verified; evidence: scripts/audit-npm-publish-dry-run.mjs verifies publish dry-run metadata, CLI bin preservation, required files, and integrity fields
 - URL install: verified; evidence: scripts/audit-remote-distribution.mjs verifies URL install, installed validation, installed gse.mjs status, and tamper rejection
 - Signing: verified; evidence: sign/verify/audit scripts
@@ -35,17 +35,11 @@ Turn the final-readiness matrix into an executable owner/external acceptance che
 - Public security contact record: verified; evidence: record/audit public security contact scripts and template
 - Public security contact: verified; evidence: .gse/releases/public-security-contact-owner-required.md
 - Public channel publication record: verified; evidence: record/audit public channel publication scripts and template
+- Public registry publication: verified; evidence: .gse/releases/public-registry-publication-npm.md
 - Portable command execution: verified; evidence: run-gse-command and audit-command-execution
 - Host adapters: verified; evidence: command adapter generator and audit
 
 ## Pending Acceptance Gates
-
-### Public registry publication
-
-- Status: external-required
-- Current evidence: no public registry publication record is claimed
-- Required action: Attach the real owner/external evidence, then run `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force`. Preflight with `node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json`.
-- Acceptance rule: do not mark accepted until the evidence is real, dated, and re-audited.
 
 ### Marketplace approval
 

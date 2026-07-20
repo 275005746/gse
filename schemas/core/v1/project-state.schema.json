@@ -14,13 +14,16 @@
     "canonicalGoalSource": { "type": ["string", "null"] },
     "canonicalPlan": { "type": ["string", "null"] },
     "phase": { "type": ["string", "null"] },
-    "currentSummary": { "type": ["object", "null"] },
-    "currentSlice": { "type": ["object", "null"] },
+    "currentSummary": { "type": ["object", "string", "null"] },
+    "currentSlice": { "type": ["object", "string", "null"] },
     "toolStatuses": { "type": ["object", "null"] },
     "lastEvidence": { "type": ["string", "null"] },
     "blockedGates": { "type": "array" },
     "nextChecks": { "type": "array" },
-    "residualRisks": { "type": "array" },
-    "riskArchive": { "type": "array" }
+    "residualRisks": { "type": "array", "items": { "type": "string" } },
+    "riskHistoryPath": { "const": ".gse/risk-history.jsonl" },
+    "archivedRiskCount": { "type": "integer", "minimum": 0 },
+    "sourceRevision": { "type": "integer", "minimum": 0 },
+    "updatedAt": { "type": "string", "format": "date-time" }
   }
 }

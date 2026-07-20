@@ -1,12 +1,12 @@
 # GSE Public Release Checklist
 
-Generated: 2026-07-17T14:08:18.272Z
+Generated: 2026-07-18T19:15:57.539Z
 Source manifest: `.gse/acceptance/release-status-manifest.json`
 
 ## Boundary
 
 - Public accepted: not-accepted
-- Pending owner/external gates: 3
+- Pending owner/external gates: 2
 - This checklist is an execution runway. It does not publish, approve, or accept a release by itself.
 - A gate is complete only after real accepted evidence is recorded and final readiness is re-audited.
 
@@ -43,23 +43,10 @@ Source manifest: `.gse/acceptance/release-status-manifest.json`
 
 ### 05. Publish the registry package
 
-- Gate: Public registry publication
-- Status: external-required
-- Required evidence: Real registry package URL, version, digest, publication date, verification command, and accepted evidence.
+- Gate: local preparation
+- Status: verified locally before public handoff
 - Publish only after the public repository and CI evidence are available.
 - Record package URL, version, artifact digest, publication date, and installability proof.
-
-Preflight:
-
-```text
-node scripts/record-public-channel-publication.mjs --root <gse-root> --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json
-```
-
-Record accepted evidence:
-
-```text
-node scripts/record-public-channel-publication.mjs --root <gse-root> --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force
-```
 
 ### 06. Publish or submit marketplace listing
 

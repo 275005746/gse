@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { CONTEXT_BUDGETS, inspectRollout, internalTaskRouting, resolveRollout, unavailableReport } from './context-health.mjs'
+import { CONTEXT_BUDGETS, buildContextResumeSummary, inspectRollout, internalTaskRouting, resolveRollout, unavailableReport } from './context-health.mjs'
 
 const args = process.argv.slice(2)
 const readArg = (name, fallback = null) => { const index = args.indexOf(name); return index === -1 ? fallback : args[index + 1] ?? fallback }
@@ -81,13 +81,32 @@ if (markdown.length > maxChars) { markdown = markdown.slice(0, maxChars - 80).tr
 const estimatedTokens = Math.ceil(markdown.length / 4)
 const defaultOut = path.join(target, '.gse', 'handoffs', `context-checkpoint-${new Date().toISOString().replace(/[:.]/g, '-')}.md`)
 const out = path.resolve(readArg('--out', defaultOut))
-if (execute) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, markdown, 'utf8') }
+const indexOut = path.join(target, '.gse', 'handoffs', 'context-resume-index.json')
+const resumeSummary = buildContextResumeSummary({
+  target,
+  state,
+  health,
+  projectStage: state?.projectStage ?? null,
+  preflight: { status: health.rolloverRequired ? 'checkpoint-required' : 'ready' },
+  acceptance: { status: 'unknown', criteria: [state?.currentSlice?.outcome, state?.currentSlice?.nextAction].filter(Boolean) },
+  evidence: { references: selectedFiles.map((file) => ({ path: file, status: 'selected' })), count: selectedFiles.length },
+  risks: Array.isArray(state?.residualRisks) ? state.residualRisks : [],
+  sourcePaths: ['.gse/state.json', '.gse/current-slice.md', '.gse/goal-map.md', ...selectedFiles],
+  rolloverReason: health.rolloverRequired ? health.action : null,
+})
+if (execute) {
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  fs.writeFileSync(out, markdown, 'utf8')
+  if (resumeSummary.bounds.withinBudget) fs.writeFileSync(indexOut, JSON.stringify(resumeSummary, null, 2) + '\n', 'utf8')
+  else fs.rmSync(indexOut, { force: true })
+}
 const report = {
   status: 'ready', target, root, health: { health: health.health, usagePercent: health.usagePercent, compactionCount: health.compactionCount, action: health.action, rolloverRequired: health.rolloverRequired },
   budget: { maxTokens, estimatedTokens, maxChars, truncated, withinBudget: estimatedTokens <= maxTokens },
   selectedFiles, rejectedFiles,
   contextPack: { maxFiles: 8, files: selectedFiles, rejectedFiles, maxEstimatedTokens: maxTokens, retrievalCycles: CONTEXT_BUDGETS.maxRetrievalCycles },
-  output: { path: out, written: execute, contentIncluded: includeContent },
+  output: { path: out, written: execute, contentIncluded: includeContent, resumeIndexPath: indexOut, resumeIndexWritten: execute },
+  resumeSummary,
   markdownPreview: markdown.slice(0, 600),
   ...(includeContent ? { markdown } : {}),
   resultCapsule: { maxEstimatedTokens: CONTEXT_BUDGETS.maxAgentResultTokens, requiredFields: ['status', 'summary', 'filesInspected', 'filesChanged', 'verification', 'evidence', 'residualRisks', 'nextAction'] },

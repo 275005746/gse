@@ -231,7 +231,14 @@ function hasRequiredWriteMetadata(write) {
   const required = ['kind', 'path', 'beforeDigest', 'afterDigest', 'stagedPath']
   if (!required.every((field) => Object.hasOwn(write, field))) return false
   if (write.kind === 'jsonl-append') {
-    return typeof write.eventId === 'string' && Number.isInteger(write.beforeSize)
+    const eventIds = Array.isArray(write.eventIds)
+      ? write.eventIds
+      : [write.eventId]
+    return eventIds.length > 0
+      && eventIds.every((eventId) => typeof eventId === 'string' && eventId.length > 0)
+      && new Set(eventIds).size === eventIds.length
+      && Number.isInteger(write.beforeSize)
+      && write.beforeSize >= 0
   }
   if (write.kind === 'tree-move') {
     return typeof write.sourcePath === 'string' && typeof write.targetPath === 'string'
@@ -997,6 +1004,171 @@ async function probeTreeMoveTargetConflict(transactionImport) {
   }
 }
 
+async function probeBatchedJsonl(transactionImport, jsonlImport) {
+  const transactionRequired = requireExports(transactionImport, modulePaths.transaction, ['executeTransaction'])
+  const jsonlRequired = requireExports(jsonlImport, modulePaths.jsonl, ['readCommittedJsonl'])
+  if (!transactionRequired.available || !jsonlRequired.available) {
+    return unavailableProbe('batched JSONL transaction', [...transactionRequired.diagnostics, ...jsonlRequired.diagnostics])
+  }
+
+  try {
+    const target = createFixture('transaction-faults')
+    const transactionId = 'tx-audit-batched-jsonl'
+    const eventIds = ['evt-audit-batched-jsonl-a', 'evt-audit-batched-jsonl-b', 'evt-audit-batched-jsonl-c']
+    const options = {
+      target,
+      operationId: 'op-audit-batched-jsonl',
+      transactionId,
+      expectedRevision: 0,
+      writes: [],
+      events: eventIds.map((eventId, index) => eventWrite(
+        transactionId,
+        eventId,
+        `Batched JSONL event ${index + 1}.`,
+      )),
+      allowedFieldsByRecordType,
+    }
+    const committed = await transactionImport.module.executeTransaction(options)
+    const manifest = readJson(manifestPath(target, transactionId))
+    const jsonlWrites = manifest.writes.filter((write) => write.kind === 'jsonl-append')
+    const replay = await transactionImport.module.executeTransaction(options)
+    const index = jsonlImport.module.readCommittedJsonl(target, '.gse/evidence/index.jsonl')
+    return {
+      available: true,
+      committed,
+      replay,
+      manifest,
+      jsonlWrites,
+      eventIds,
+      eventCounts: Object.fromEntries(eventIds.map((eventId) => [eventId, countEventId(index.records, eventId)])),
+      revision: readRevision(target),
+    }
+  } catch (error) {
+    return failedProbe('batched JSONL transaction', error)
+  }
+}
+
+async function probeMigrationBootstrap(transactionImport) {
+  const required = requireExports(transactionImport, modulePaths.transaction, ['executeTransaction'])
+  if (!required.available) return unavailableProbe('migration revision bootstrap', required.diagnostics)
+
+  try {
+    const target = createFixture('transaction-faults')
+    const statePath = path.join(target, '.gse', 'state.json')
+    const legacyState = readJson(statePath)
+    delete legacyState.stateRevision
+    fs.writeFileSync(statePath, `${JSON.stringify(legacyState, null, 2)}\n`)
+    const stateDigest = digestFile(statePath)
+    const result = await transactionImport.module.executeTransaction({
+      target,
+      operationId: 'op-audit-migration-bootstrap',
+      transactionId: 'tx-audit-migration-bootstrap',
+      expectedRevision: 0,
+      migrationBootstrap: { stateDigest },
+      writes: [{
+        kind: 'json-replace',
+        path: '.gse/state.json',
+        value: { ...legacyState, stateRevision: 0 },
+      }],
+      events: [],
+      allowedFieldsByRecordType,
+    })
+
+    const rejectedTarget = createFixture('transaction-faults')
+    const rejectedStatePath = path.join(rejectedTarget, '.gse', 'state.json')
+    const rejectedState = readJson(rejectedStatePath)
+    delete rejectedState.stateRevision
+    fs.writeFileSync(rejectedStatePath, `${JSON.stringify(rejectedState, null, 2)}\n`)
+    const rejected = await transactionImport.module.executeTransaction({
+      target: rejectedTarget,
+      operationId: 'op-audit-migration-bootstrap-rejected',
+      transactionId: 'tx-audit-migration-bootstrap-rejected',
+      expectedRevision: 0,
+      migrationBootstrap: { stateDigest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      writes: [{
+        kind: 'json-replace',
+        path: '.gse/state.json',
+        value: { ...rejectedState, stateRevision: 0 },
+      }],
+      events: [],
+      allowedFieldsByRecordType,
+    })
+
+    return {
+      available: true,
+      result,
+      revision: readRevision(target),
+      rejected,
+      rejectedStateHasRevision: Object.hasOwn(readJson(rejectedStatePath), 'stateRevision'),
+      rejectedManifestExists: fs.existsSync(manifestPath(rejectedTarget, 'tx-audit-migration-bootstrap-rejected')),
+    }
+  } catch (error) {
+    return failedProbe('migration revision bootstrap', error)
+  }
+}
+
+async function probeBatchedJsonlRecovery(transactionImport, recoveryImport, jsonlImport) {
+  const required = [
+    requireExports(transactionImport, modulePaths.transaction, ['executeTransaction']),
+    requireExports(recoveryImport, modulePaths.recovery, ['recoverTransactions']),
+    requireExports(jsonlImport, modulePaths.jsonl, ['readCommittedJsonl']),
+  ]
+  if (required.some((item) => !item.available)) {
+    return unavailableProbe('batched JSONL recovery', required.flatMap((item) => item.diagnostics))
+  }
+
+  try {
+    const rollbackTarget = createFixture('transaction-faults')
+    const rollbackTransactionId = 'tx-audit-batched-rollback'
+    const rollbackEventIds = ['evt-audit-batched-rollback-a', 'evt-audit-batched-rollback-b']
+    await captureExecution(transactionImport.module.executeTransaction, {
+      target: rollbackTarget,
+      operationId: 'op-audit-batched-rollback',
+      transactionId: rollbackTransactionId,
+      expectedRevision: 0,
+      writes: [],
+      events: rollbackEventIds.map((eventId) => eventWrite(rollbackTransactionId, eventId, 'Batched rollback event.')),
+      allowedFieldsByRecordType,
+      faultAfterStep: 'after-publish',
+    })
+    forceDeadLockOwner(rollbackTarget)
+    const rollback = recoveryImport.module.recoverTransactions(rollbackTarget)
+    const rollbackIndex = jsonlImport.module.readCommittedJsonl(rollbackTarget, '.gse/evidence/index.jsonl')
+
+    const forwardTarget = createFixture('transaction-faults')
+    const forwardTransactionId = 'tx-audit-batched-forward'
+    const forwardEventIds = ['evt-audit-batched-forward-a', 'evt-audit-batched-forward-b']
+    await captureExecution(transactionImport.module.executeTransaction, {
+      target: forwardTarget,
+      operationId: 'op-audit-batched-forward',
+      transactionId: forwardTransactionId,
+      expectedRevision: 0,
+      writes: [],
+      events: forwardEventIds.map((eventId) => eventWrite(forwardTransactionId, eventId, 'Batched roll-forward event.')),
+      allowedFieldsByRecordType,
+      faultAfterStep: 'after-commit-marker',
+    })
+    fs.rmSync(path.join(forwardTarget, '.gse', 'evidence', 'index.jsonl'))
+    forceDeadLockOwner(forwardTarget)
+    const forward = recoveryImport.module.recoverTransactions(forwardTarget)
+    const forwardIndex = jsonlImport.module.readCommittedJsonl(forwardTarget, '.gse/evidence/index.jsonl')
+
+    return {
+      available: true,
+      rollback,
+      rollbackOutcome: recoveryOutcome(rollback, rollbackTransactionId),
+      rollbackEventCounts: Object.fromEntries(rollbackEventIds.map((eventId) => [eventId, countEventId(rollbackIndex.records, eventId)])),
+      rollbackRevision: readRevision(rollbackTarget),
+      forward,
+      forwardOutcome: recoveryOutcome(forward, forwardTransactionId),
+      forwardEventCounts: Object.fromEntries(forwardEventIds.map((eventId) => [eventId, countEventId(forwardIndex.records, eventId)])),
+      forwardRevision: readRevision(forwardTarget),
+    }
+  } catch (error) {
+    return failedProbe('batched JSONL recovery', error)
+  }
+}
+
 async function probeSecretBlocking(transactionImport) {
   const required = requireExports(transactionImport, modulePaths.transaction, ['executeTransaction'])
   if (!required.available) return unavailableProbe('secret blocking', required.diagnostics)
@@ -1049,6 +1221,9 @@ try {
   const postMarker = await probePostMarkerRecovery(imports.transaction, imports.recovery)
   const treeMoveRollback = await probeTreeMoveRollback(imports.transaction, imports.recovery)
   const treeMoveTargetConflict = await probeTreeMoveTargetConflict(imports.transaction)
+  const batchedJsonl = await probeBatchedJsonl(imports.transaction, imports.jsonl)
+  const migrationBootstrap = await probeMigrationBootstrap(imports.transaction)
+  const batchedRecovery = await probeBatchedJsonlRecovery(imports.transaction, imports.recovery, imports.jsonl)
   const secretAttempt = await probeSecretBlocking(imports.transaction)
 
   const secondLock = lockExclusion.secondLock
@@ -1240,6 +1415,42 @@ try {
         && treeMoveTargetConflict.targetOwner === 'existing authority\n'
         && treeMoveTargetConflict.stateRevision === 0,
       treeMoveTargetConflict,
+    ),
+    check(
+      'TX19',
+      'same-destination JSONL events publish as one manifest batch and replay without duplicates',
+      batchedJsonl.available
+        && batchedJsonl.jsonlWrites?.length === 1
+        && JSON.stringify(batchedJsonl.jsonlWrites[0]?.eventIds) === JSON.stringify(batchedJsonl.eventIds)
+        && hasRequiredWriteMetadata(batchedJsonl.jsonlWrites[0])
+        && Object.values(batchedJsonl.eventCounts ?? {}).every((count) => count === 1)
+        && batchedJsonl.revision === 1
+        && resultField(batchedJsonl.replay, 'reasonCode') === 'OPERATION_ALREADY_COMMITTED',
+      batchedJsonl,
+    ),
+    check(
+      'TX20',
+      'migration bootstrap accepts only the exact missing-revision source digest',
+      migrationBootstrap.available
+        && resultField(migrationBootstrap.result, 'status') === 'complete'
+        && migrationBootstrap.revision === 1
+        && resultField(migrationBootstrap.rejected, 'status') === 'repair'
+        && resultField(migrationBootstrap.rejected, 'reasonCode') === 'INVALID_PROJECT_STATE'
+        && migrationBootstrap.rejectedStateHasRevision === false
+        && migrationBootstrap.rejectedManifestExists === false,
+      migrationBootstrap,
+    ),
+    check(
+      'TX21',
+      'batched JSONL recovery rolls back before marker and rolls forward every event after marker',
+      batchedRecovery.available
+        && batchedRecovery.rollbackOutcome === 'rolled-back'
+        && batchedRecovery.rollbackRevision === 0
+        && Object.values(batchedRecovery.rollbackEventCounts ?? {}).every((count) => count === 0)
+        && batchedRecovery.forwardOutcome === 'rolled-forward'
+        && batchedRecovery.forwardRevision === 1
+        && Object.values(batchedRecovery.forwardEventCounts ?? {}).every((count) => count === 1),
+      batchedRecovery,
     ),
   ]
 

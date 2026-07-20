@@ -1,6 +1,6 @@
 {
   "name": "@t275005746/gse",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Goal-Spec-Evidence Engineering workflow skill for long-running agent-assisted software projects.",
   "type": "module",
   "license": "MIT",

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gse.local/schemas/core/v1/risk-history-event.schema.json",
+  "title": "GSE Core Risk History Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "transactionId",
+    "recordType",
+    "riskId",
+    "deduplicationKey",
+    "risk",
+    "sourceRevision",
+    "archivedAt",
+    "resolution",
+    "stateRevision"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "eventId": { "type": "string", "minLength": 1 },
+    "transactionId": { "type": ["string", "null"] },
+    "recordType": { "const": "risk-history" },
+    "riskId": { "type": "string", "minLength": 1 },
+    "deduplicationKey": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "risk": { "type": "string", "minLength": 1 },
+    "sourceRevision": { "type": "integer", "minimum": 0 },
+    "archivedAt": { "type": "string", "format": "date-time" },
+    "resolution": { "type": "string", "minLength": 1 },
+    "stateRevision": { "type": "integer", "minimum": 0 }
+  }
+}

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "name": "gse",
   "displayName": "GSE",
-  "generatedAt": "2026-07-17T14:08:20.860Z",
+  "generatedAt": "2026-07-18T19:16:00.848Z",
   "root": "<gse-root>",
   "claimBoundary": {
     "publicAccepted": "not-accepted",
@@ -31,7 +31,7 @@
       {
         "area": "npm tarball install",
         "status": "verified",
-        "evidence": "scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed bin execution, and installed README audit"
+        "evidence": "scripts/audit-npm-tarball-install.mjs verifies npm tarball creation, clean consumer install, installed help/init/status execution, and installed README audit"
       },
       {
         "area": "npm publish dry-run",
@@ -104,6 +104,11 @@
         "evidence": "record/audit public channel publication scripts and template"
       },
       {
+        "area": "Public registry publication",
+        "status": "verified",
+        "evidence": ".gse/releases/public-registry-publication-npm.md"
+      },
+      {
         "area": "Portable command execution",
         "status": "verified",
         "evidence": "run-gse-command and audit-command-execution"
@@ -116,11 +121,6 @@
     ],
     "ownerRequired": [],
     "externalRequired": [
-      {
-        "area": "Public registry publication",
-        "status": "external-required",
-        "evidence": "no public registry publication record is claimed"
-      },
       {
         "area": "Marketplace approval",
         "status": "external-required",
@@ -169,16 +169,6 @@
     "publicAccepted": "not-accepted",
     "pendingGates": [
       {
-        "area": "Public registry publication",
-        "status": "external-required",
-        "currentEvidence": "no public registry publication record is claimed",
-        "recordCommand": "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force",
-        "preflightCommand": "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json",
-        "requiredEvidence": "Real registry package URL, version, digest, publication date, verification command, and accepted evidence.",
-        "owner": "external registry",
-        "willPromoteWhenAccepted": true
-      },
-      {
         "area": "Marketplace approval",
         "status": "external-required",
         "currentEvidence": "references/marketplace-discovery.md",
@@ -200,12 +190,10 @@
       }
     ],
     "nextCommands": [
-      "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force",
       "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type marketplace --channel-name __MARKETPLACE_NAME__ --channel-url __MARKETPLACE_LISTING_URL__ --version __VERSION__ --review-status approved --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __MARKETPLACE_LISTING_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-marketplace-approval true --proves-channel-installability true --evidence-status accepted --force",
       "node scripts/record-host-invocation.mjs --root __GSE__ --host __HOST__ --host-version __VERSION_OR_UNKNOWN__ --project gse --adapter-path __HOST_ADAPTER_OR_RUNTIME_ENTRYPOINT__ --invocation-method __HOST_UI_COMMAND_RUNTIME_BRIDGE_PLUGIN_COMMAND_AGENT_COMMAND__ --command \"/gse continue\" --status accepted --evidence-owner __OWNER__ --evidence __THREAD_TRANSCRIPT_SCREENSHOT_TERMINAL_OUTPUT_OR_HOST_LOG__ --verification-command \"node scripts/audit-final-readiness.mjs --root __GSE__ --json\" --native-slash-command false --portable-text-command false --generated-pointer false --owner-acceptance-required false --force"
     ],
     "nextPreflightCommands": [
-      "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type package-registry --channel-name __REGISTRY_NAME__ --channel-url __REGISTRY_PACKAGE_URL__ --version __VERSION__ --artifact-digest __DIGEST__ --review-status published --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __REGISTRY_PACKAGE_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-registry-publication true --proves-channel-installability true --evidence-status accepted --force --dry-run --json",
       "node scripts/record-public-channel-publication.mjs --root __GSE__ --publication-status accepted --channel-type marketplace --channel-name __MARKETPLACE_NAME__ --channel-url __MARKETPLACE_LISTING_URL__ --version __VERSION__ --review-status approved --evidence-owner __OWNER__ --evidence-date __YYYY_MM_DD__ --evidence-url __MARKETPLACE_LISTING_URL__ --verification-result passed --accepted-by __OWNER__ --accepted-at __YYYY_MM_DD__ --proves-marketplace-approval true --proves-channel-installability true --evidence-status accepted --force --dry-run --json",
       "node scripts/record-host-invocation.mjs --root __GSE__ --host __HOST__ --host-version __VERSION_OR_UNKNOWN__ --project gse --adapter-path __HOST_ADAPTER_OR_RUNTIME_ENTRYPOINT__ --invocation-method __HOST_UI_COMMAND_RUNTIME_BRIDGE_PLUGIN_COMMAND_AGENT_COMMAND__ --command \"/gse continue\" --status accepted --evidence-owner __OWNER__ --evidence __THREAD_TRANSCRIPT_SCREENSHOT_TERMINAL_OUTPUT_OR_HOST_LOG__ --verification-command \"node scripts/audit-final-readiness.mjs --root __GSE__ --json\" --native-slash-command false --portable-text-command false --generated-pointer false --owner-acceptance-required false --force --dry-run --json"
     ]

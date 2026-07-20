@@ -447,15 +447,24 @@ export function inspectPendingTransactions(target) {
   return inspectionResult(transactions, directories.diagnostics)
 }
 
-function parseStagedJsonl(bytes, transactionId, eventId, artifact) {
-  if (bytes.length === 0 || bytes[bytes.length - 1] !== 0x0a || bytes.subarray(0, bytes.length - 1).includes(0x0a)) {
-    throw Object.assign(new Error('The staged JSONL artifact must contain exactly one complete line.'), { code: 'INVALID_STAGED_JSONL' })
+function parseStagedJsonl(bytes, transactionId, eventIds, artifact) {
+  if (bytes.length === 0) return []
+  if (bytes[bytes.length - 1] !== 0x0a) {
+    throw Object.assign(new Error('The staged JSONL artifact must contain complete lines.'), { code: 'INVALID_STAGED_JSONL' })
   }
-  const text = bytes.subarray(0, bytes.length - 1).toString('utf8')
-  const record = JSON.parse(text)
-  if (!record || typeof record !== 'object' || Array.isArray(record) || record.eventId !== eventId || record.transactionId !== transactionId) {
-    throw Object.assign(new Error(`The staged JSONL record does not match ${artifact}.`), { code: 'INVALID_STAGED_JSONL' })
+  const records = []
+  for (const line of bytes.toString('utf8').split('\n').slice(0, -1)) {
+    if (line.length === 0) throw Object.assign(new Error('The staged JSONL artifact contains an empty line.'), { code: 'INVALID_STAGED_JSONL' })
+    const record = JSON.parse(line)
+    if (!record || typeof record !== 'object' || Array.isArray(record) || !eventIds.includes(record.eventId) || record.transactionId !== transactionId) {
+      throw Object.assign(new Error(`A staged JSONL record does not match ${artifact}.`), { code: 'INVALID_STAGED_JSONL' })
+    }
+    records.push(record)
   }
+  if (new Set(records.map((record) => record.eventId)).size !== records.length) {
+    throw Object.assign(new Error('The staged JSONL artifact contains duplicate event IDs.'), { code: 'INVALID_STAGED_JSONL' })
+  }
+  return records
 }
 
 function readBeforeBytes(root, transactionId, index, beforeDigest, required) {
@@ -516,7 +525,8 @@ function rollForwardPlan(root, transactionId, manifest) {
       return { write, bytes: stagedBytes }
     }
 
-    parseStagedJsonl(stagedBytes, transactionId, write.eventId, write.stagedPath)
+    const eventIds = Array.isArray(write.eventIds) ? write.eventIds : [write.eventId]
+    parseStagedJsonl(stagedBytes, transactionId, eventIds, write.stagedPath)
     const beforeBytes = readBeforeBytes(root, transactionId, index, write.beforeDigest, true)
     if (beforeBytes.length !== write.beforeSize) {
       const error = new Error('A JSONL before image does not match the manifest size.')

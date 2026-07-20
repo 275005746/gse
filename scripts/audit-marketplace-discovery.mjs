@@ -18,10 +18,6 @@ function read(relativePath) {
   return fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8').replace(/^\uFEFF/, '') : ''
 }
 
-function exists(relativePath) {
-  return fs.existsSync(path.join(root, relativePath))
-}
-
 function readJson(relativePath) {
   try {
     return JSON.parse(read(relativePath))
@@ -62,9 +58,9 @@ const noPrivateOrLocalLeak =
 
 const checks = [
   check('MD01', 'marketplace listing metadata exists and parses', Boolean(listing), 'assets/marketplace/gse-listing.json'),
-  check('MD02', 'listing has searchable identity and summary', listing?.name === 'gse' && listing?.displayName === 'GSE' && typeof listing?.tagline === 'string' && listing.tagline.length > 20 && typeof listing?.summary === 'string' && listing.summary.includes('Goal-Spec-Evidence'), 'name, displayName, tagline, summary'),
+  check('MD02', 'listing has searchable identity and summary', listing?.name === 'gse' && listing?.displayName === 'GSE' && typeof listing?.tagline === 'string' && listing.tagline.length > 20 && typeof listing?.summary === 'string' && listing.summary.includes('AI coding agents') && listing.summary.includes('functional Slices'), 'name, displayName, tagline, summary'),
   check('MD03', 'listing uses natural ecosystem keywords', ['agent workflow engineering', 'goal-spec workflow', 'SDD', 'AI coding agent workflow', 'evidence gates', 'goal map'].every((item) => keywords.has(item)), 'keywords'),
-  check('MD04', 'listing classifies project category without keyword stuffing block', categories.has('agent workflow engineering') && categories.has('software development workflow') && marketplaceRef.includes('Do not add isolated search-term blocks'), 'categories and marketplace reference'),
+  check('MD04', 'listing classifies the Agent Skill without unverified inclusion claims', categories.has('agent workflow engineering') && categories.has('software development workflow') && marketplaceRef.includes('external-required') && marketplaceRef.includes('real public URL') && marketplaceRef.includes('local marketplace audit is a metadata check'), 'categories and discovery reference'),
   check('MD05', 'listing exposes human and machine entrypoints', ['SKILL.md', 'README.md', 'README.zh-CN.md', 'scripts/run-gse-command.mjs', 'scripts/validate-gse.mjs'].every((item) => entrypoints.has(item)), 'entrypoints'),
   check('MD06', 'listing exposes validation commands', verification.some((item) => item.includes('validate-gse.mjs')) && verification.some((item) => item.includes('audit-marketplace-discovery.mjs')) && verification.some((item) => item.includes('audit-host-ui-invocation.mjs')), 'verification commands'),
   check('MD07', 'listing separates host support status from proof', hostSupport.some((item) => item.host.includes('Codex') && item.status === 'documented') && hostSupport.some((item) => item.host.includes('Claude') && item.status === 'documented') && boundaries.includes('native host UI invocation require separate evidence'), 'hostSupport and boundaries'),
